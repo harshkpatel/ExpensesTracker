@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { Upload, Camera, Check } from 'lucide-react';
+import config from '../config';
 
 function ScanReceipt() {
   const [file, setFile] = useState(null);
@@ -34,7 +35,7 @@ function ScanReceipt() {
     formData.append('file', file);
 
     try {
-      const response = await axios.post('http://localhost:8000/scan-receipt/', formData, {
+      const response = await axios.post(`${config.apiUrl}${config.endpoints.scanReceipt}`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
@@ -59,7 +60,7 @@ function ScanReceipt() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:8000/expenses/', formData);
+      await axios.post(`${config.apiUrl}${config.endpoints.expenses}`, formData);
       setFile(null);
       setPreview(null);
       setResult(null);

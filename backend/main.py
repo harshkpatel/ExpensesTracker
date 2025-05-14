@@ -26,7 +26,10 @@ app = FastAPI(title="Expenses Tracker API")
 # Add CORS middleware to allow frontend to communicate with backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=[
+        "http://localhost:3000",  # Local development
+        "https://expenses-tracker-frontend.vercel.app",  # Production frontend
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -201,6 +204,19 @@ async def get_summary(db: Session = Depends(get_db)):
         for month, total in sorted(monthly_totals.items())
     ]
     
+    # Get recent expenses (last 5)
+    recent_expenses = db.query(ExpenseModel).order_by(ExpenseModel.date.desc()).limit(5).all()
+    recent_expenses_list = [
+        {
+            "id": expense.id,
+            "amount": expense.amount,
+            "category": expense.category,
+            "description": expense.description,
+            "date": expense.date.isoformat()
+        }
+        for expense in recent_expenses
+    ]
+    
     # Generate optimization suggestions
     suggestions = []
     if total_expenses > 1000:
@@ -212,6 +228,7 @@ async def get_summary(db: Session = Depends(get_db)):
         "totalExpenses": total_expenses,
         "categoryBreakdown": category_breakdown,
         "monthlyTrend": monthly_trend,
+        "recentExpenses": recent_expenses_list,
         "optimizationSuggestions": suggestions
     }
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Plus, Pencil, Trash2 } from 'lucide-react';
+import config from '../config';
 
 function Expenses() {
   const [expenses, setExpenses] = useState([]);
@@ -21,7 +22,7 @@ function Expenses() {
 
   const fetchExpenses = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/expenses/');
+      const response = await axios.get(`${config.apiUrl}${config.endpoints.expenses}`);
       setExpenses(response.data);
     } catch (error) {
       console.error('Error fetching expenses:', error);
@@ -30,7 +31,7 @@ function Expenses() {
 
   const fetchCategories = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/categories/');
+      const response = await axios.get(`${config.apiUrl}${config.endpoints.categories}`);
       setCategories(response.data);
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -40,10 +41,16 @@ function Expenses() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const expenseData = {
+        ...formData,
+        amount: parseFloat(formData.amount),
+        date: new Date(formData.date).toISOString()
+      };
+      
       if (editingExpense) {
-        await axios.put(`http://localhost:8000/expenses/${editingExpense.id}`, formData);
+        await axios.put(`${config.apiUrl}${config.endpoints.expenses}/${editingExpense.id}`, expenseData);
       } else {
-        await axios.post('http://localhost:8000/expenses/', formData);
+        await axios.post(`${config.apiUrl}${config.endpoints.expenses}`, expenseData);
       }
       setIsModalOpen(false);
       setEditingExpense(null);
@@ -56,6 +63,7 @@ function Expenses() {
       fetchExpenses();
     } catch (error) {
       console.error('Error saving expense:', error);
+      alert('Error saving expense. Please try again.');
     }
   };
 
@@ -73,7 +81,7 @@ function Expenses() {
   const handleDelete = async (id) => {
     if (window.confirm('Are you sure you want to delete this expense?')) {
       try {
-        await axios.delete(`http://localhost:8000/expenses/${id}`);
+        await axios.delete(`${config.apiUrl}${config.endpoints.expenses}/${id}`);
         fetchExpenses();
       } catch (error) {
         console.error('Error deleting expense:', error);

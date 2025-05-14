@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Plus, Trash2, Download, Upload } from 'lucide-react';
+import config from '../config';
 
 function Settings() {
   const [categories, setCategories] = useState([]);
@@ -14,7 +15,7 @@ function Settings() {
 
   const fetchCategories = async () => {
     try {
-      const response = await axios.get('http://localhost:8000/categories/');
+      const response = await axios.get(`${config.apiUrl}${config.endpoints.categories}`);
       setCategories(response.data);
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -26,7 +27,7 @@ function Settings() {
     if (!newCategory.trim()) return;
 
     try {
-      await axios.post('http://localhost:8000/categories/', { name: newCategory });
+      await axios.post(`${config.apiUrl}${config.endpoints.categories}`, { name: newCategory });
       setNewCategory('');
       fetchCategories();
     } catch (error) {
@@ -38,7 +39,7 @@ function Settings() {
   const handleDeleteCategory = async (id) => {
     if (window.confirm('Are you sure you want to delete this category?')) {
       try {
-        await axios.delete(`http://localhost:8000/categories/${id}`);
+        await axios.delete(`${config.apiUrl}${config.endpoints.categories}/${id}`);
         fetchCategories();
       } catch (error) {
         console.error('Error deleting category:', error);
