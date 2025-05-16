@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Upload, Camera, Check } from 'lucide-react';
 import config from '../config';
@@ -8,12 +8,27 @@ function ScanReceipt() {
   const [preview, setPreview] = useState(null);
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState(null);
+  const [categories, setCategories] = useState([]);
   const [formData, setFormData] = useState({
     amount: '',
-    category: '',
+    category_id: '',
     description: '',
     date: new Date().toISOString().split('T')[0],
   });
+
+  useEffect(() => {
+    // Fetch categories when component mounts
+    const fetchCategories = async () => {
+      try {
+        const response = await axios.get(`${config.apiUrl}${config.endpoints.categories}`);
+        setCategories(response.data.filter(cat => cat.name !== 'Uncategorized'));
+      } catch (error) {
+        console.error('Error fetching categories:', error);
+      }
+    };
+
+    fetchCategories();
+  }, []);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -41,17 +56,24 @@ function ScanReceipt() {
         },
       });
 
-      const { extracted_data } = response.data;
+      console.log('Scan response:', response.data);
       setResult(response.data);
+      
+      // Handle different response structures
       setFormData({
-        amount: extracted_data.amount?.toString() || '',
-        category: extracted_data.category || '',
-        description: extracted_data.description || '',
-        date: extracted_data.date || new Date().toISOString().split('T')[0],
+        amount: response.data.amount?.toString() || '0.01',
+        category_id: '',
+        description: response.data.description || 'Receipt scan',
+        date: response.data.date || new Date().toISOString().split('T')[0],
       });
+      
+      alert('Receipt scanned successfully! Please review the details.');
     } catch (error) {
       console.error('Error scanning receipt:', error);
-      alert('Error scanning receipt. Please try again.');
+      alert('Error scanning receipt. The receipt was saved but could not be processed automatically. Please enter the details manually.');
+      
+      // Still allow manual entry even if scan fails
+      setResult({ manual: true });
     } finally {
       setScanning(false);
     }
@@ -60,13 +82,20 @@ function ScanReceipt() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post(`${config.apiUrl}${config.endpoints.expenses}`, formData);
+      const expenseData = {
+        amount: parseFloat(formData.amount),
+        description: formData.description,
+        date: new Date(formData.date).toISOString(),
+        category_id: formData.category_id ? parseInt(formData.category_id) : null
+      };
+      
+      await axios.post(`${config.apiUrl}${config.endpoints.expenses}`, expenseData);
       setFile(null);
       setPreview(null);
       setResult(null);
       setFormData({
         amount: '',
-        category: '',
+        category_id: '',
         description: '',
         date: new Date().toISOString().split('T')[0],
       });
@@ -148,13 +177,18 @@ function ScanReceipt() {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Category</label>
-              <input
-                type="text"
-                required
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+              <select
+                value={formData.category_id}
+                onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
                 className="input-field mt-1"
-              />
+              >
+                <option value="">Select a category</option>
+                {categories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">Description</label>

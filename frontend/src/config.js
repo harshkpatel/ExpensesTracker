@@ -4,7 +4,7 @@ const config = {
         expenses: '/expenses',
         categories: '/categories',
         analytics: '/analytics/summary',
-        receipts: '/receipts/scan'
+        scanReceipt: '/receipts/scan'
     }
 };
 

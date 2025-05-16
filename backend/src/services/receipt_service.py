@@ -24,7 +24,7 @@ class ReceiptService:
         # For now, return a dummy expense with a minimum valid amount
         return ExpenseCreate(
             amount=0.01,  # Minimum valid amount
-            category="Uncategorized",
+            category_id=None,
             description="Receipt scan pending",
             receipt_path=receipt_path
         ) 
