@@ -1,15 +1,18 @@
 from pydantic import BaseModel, Field
-from datetime import datetime
 from typing import Optional
+from datetime import datetime
 
 class ExpenseBase(BaseModel):
-    amount: float = Field(..., gt=0, description="Amount of the expense")
-    category: str = Field(..., description="Category of the expense")
+    amount: float = Field(..., description="Amount of the expense")
     description: Optional[str] = Field(None, description="Description of the expense")
-    date: datetime = Field(default_factory=datetime.now, description="Date of the expense")
-    receipt_path: Optional[str] = Field(None, description="Path to the receipt image")
+    date: datetime = Field(default_factory=datetime.utcnow, description="Date of the expense")
+    category_id: Optional[int] = Field(None, description="ID of the category")
+    receipt_path: Optional[str] = Field(None, description="Path to the receipt file")
 
 class ExpenseCreate(ExpenseBase):
+    pass
+
+class ExpenseUpdate(ExpenseBase):
     pass
 
 class Expense(ExpenseBase):

@@ -8,8 +8,14 @@ class CategoryBase(BaseModel):
 class CategoryCreate(CategoryBase):
     pass
 
+class CategoryUpdate(CategoryBase):
+    pass
+
 class Category(CategoryBase):
     id: int = Field(..., description="Unique identifier for the category")
+    is_protected: bool = Field(default=False, description="Whether the category is protected from deletion")
     
     class Config:
-        from_attributes = True 
+        from_attributes = True
+
+UNCATEGORIZED = "Uncategorized" 

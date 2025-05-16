@@ -16,7 +16,8 @@ function Settings() {
   const fetchCategories = async () => {
     try {
       const response = await axios.get(`${config.apiUrl}${config.endpoints.categories}`);
-      setCategories(response.data);
+      const filteredCategories = response.data.filter(cat => cat.name !== 'Uncategorized');
+      setCategories(filteredCategories);
     } catch (error) {
       console.error('Error fetching categories:', error);
     }
@@ -37,7 +38,13 @@ function Settings() {
   };
 
   const handleDeleteCategory = async (id) => {
-    if (window.confirm('Are you sure you want to delete this category?')) {
+    const category = categories.find(cat => cat.id === id);
+    if (category?.name === 'Uncategorized') {
+      alert('Cannot delete the Uncategorized category.');
+      return;
+    }
+
+    if (window.confirm('Are you sure you want to delete this category? All expenses in this category will be moved to Uncategorized.')) {
       try {
         await axios.delete(`${config.apiUrl}${config.endpoints.categories}/${id}`);
         fetchCategories();

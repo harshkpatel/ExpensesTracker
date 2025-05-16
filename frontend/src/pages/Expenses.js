@@ -10,7 +10,7 @@ function Expenses() {
   const [editingExpense, setEditingExpense] = useState(null);
   const [formData, setFormData] = useState({
     amount: '',
-    category: '',
+    category_id: '',
     description: '',
     date: new Date().toISOString().split('T')[0],
   });
@@ -42,9 +42,10 @@ function Expenses() {
     e.preventDefault();
     try {
       const expenseData = {
-        ...formData,
         amount: parseFloat(formData.amount),
-        date: new Date(formData.date).toISOString()
+        description: formData.description,
+        date: new Date(formData.date).toISOString(),
+        category_id: formData.category_id ? parseInt(formData.category_id) : null
       };
       
       if (editingExpense) {
@@ -56,7 +57,7 @@ function Expenses() {
       setEditingExpense(null);
       setFormData({
         amount: '',
-        category: '',
+        category_id: '',
         description: '',
         date: new Date().toISOString().split('T')[0],
       });
@@ -71,7 +72,7 @@ function Expenses() {
     setEditingExpense(expense);
     setFormData({
       amount: expense.amount.toString(),
-      category: expense.category,
+      category_id: expense.category ? expense.category.id.toString() : '',
       description: expense.description,
       date: expense.date,
     });
@@ -130,7 +131,7 @@ function Expenses() {
                   {new Date(expense.date).toLocaleDateString()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {expense.category}
+                  {expense.category ? expense.category.name : 'Uncategorized'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {expense.description}
@@ -176,17 +177,18 @@ function Expenses() {
                   className="input-field mt-1"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Category</label>
+              <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-bold mb-2">
+                  Category
+                </label>
                 <select
-                  required
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  className="input-field mt-1"
+                  value={formData.category_id}
+                  onChange={(e) => setFormData({ ...formData, category_id: e.target.value })}
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                 >
                   <option value="">Select a category</option>
-                  {categories.map((category) => (
-                    <option key={category.id} value={category.name}>
+                  {categories.filter(cat => cat.name !== 'Uncategorized').map((category) => (
+                    <option key={category.id} value={category.id}>
                       {category.name}
                     </option>
                   ))}
@@ -220,7 +222,7 @@ function Expenses() {
                     setEditingExpense(null);
                     setFormData({
                       amount: '',
-                      category: '',
+                      category_id: '',
                       description: '',
                       date: new Date().toISOString().split('T')[0],
                     });

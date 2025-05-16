@@ -1,7 +1,7 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Dict, List
-from ..db.models import Expense as ExpenseModel
+from ..db.models import Expense as ExpenseModel, Category as CategoryModel
 
 class AnalyticsService:
     def __init__(self, db: Session):
@@ -11,13 +11,14 @@ class AnalyticsService:
         # Get total expenses
         total_expenses = self.db.query(func.sum(ExpenseModel.amount)).scalar() or 0
 
-        # Get expenses by category
+        # Get expenses by category name
         category_totals = (
             self.db.query(
-                ExpenseModel.category,
+                CategoryModel.name,
                 func.sum(ExpenseModel.amount).label('total')
             )
-            .group_by(ExpenseModel.category)
+            .join(CategoryModel, ExpenseModel.category_id == CategoryModel.id)
+            .group_by(CategoryModel.name)
             .all()
         )
 
@@ -32,14 +33,14 @@ class AnalyticsService:
         return {
             "totalExpenses": total_expenses,
             "categoryBreakdown": [
-                {"category": cat, "total": float(total)}
-                for cat, total in category_totals
+                {"category": cat_name, "total": float(total)}
+                for cat_name, total in category_totals
             ],
             "recentExpenses": [
                 {
                     "id": expense.id,
                     "amount": float(expense.amount),
-                    "category": expense.category,
+                    "category": expense.category.name if expense.category else "Uncategorized",
                     "description": expense.description,
                     "date": expense.date.isoformat()
                 }
