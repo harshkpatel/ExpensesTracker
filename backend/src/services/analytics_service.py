@@ -101,13 +101,6 @@ class AnalyticsService:
         # Create a dict to store expenses by month
         monthly_totals = {}
         
-        # Group expenses by month
-        for expense in yearly_expenses:
-            month_key = expense.date.strftime("%Y-%m")
-            if month_key not in monthly_totals:
-                monthly_totals[month_key] = 0
-            monthly_totals[month_key] += expense.amount
-        
         # Generate sorted months for the last 6 months
         sorted_months = []
         for i in range(5, -1, -1):  # Last 6 months
@@ -124,6 +117,13 @@ class AnalyticsService:
             month_key = f"{target_year}-{target_month:02d}"
             month_name = calendar.month_name[target_month]
             sorted_months.append((month_key, f"{month_name} {target_year}", target_year * 100 + target_month))
+        
+        # Group expenses by month using the same format as the month keys
+        for expense in yearly_expenses:
+            month_key = expense.date.strftime("%Y-%m")
+            if month_key not in monthly_totals:
+                monthly_totals[month_key] = 0
+            monthly_totals[month_key] += expense.amount
         
         # Create data points in chronological order
         for month_key, month_label, sort_key in sorted_months:
