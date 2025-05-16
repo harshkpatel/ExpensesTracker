@@ -12,6 +12,7 @@ import {
 import axios from 'axios';
 import config from '../config';
 
+// Register Chart.js components
 ChartJS.register(
   CategoryScale,
   LinearScale,
@@ -26,6 +27,7 @@ function Dashboard() {
     totalExpenses: 0,
     categoryBreakdown: [],
     recentExpenses: [],
+    monthlyTrend: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -35,6 +37,7 @@ function Dashboard() {
       try {
         setLoading(true);
         const response = await axios.get(`${config.apiUrl}${config.endpoints.analytics}`);
+        console.log("API Response:", response.data);
         setSummary(response.data);
         setError(null);
       } catch (error) {
@@ -89,6 +92,8 @@ function Dashboard() {
       </div>
     );
   }
+  
+  console.log("Monthly data available:", summary.monthlyTrend?.length);
 
   return (
     <div className="space-y-6">
@@ -151,7 +156,7 @@ function Dashboard() {
                       {new Date(expense.date).toLocaleDateString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {expense.category ? expense.category.name : 'Uncategorized'}
+                      {expense.category || 'Uncategorized'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {expense.description}

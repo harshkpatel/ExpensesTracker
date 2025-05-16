@@ -150,11 +150,10 @@ def generate_expenses(db: Session, num_expenses: int, categories: dict):
         expense_date = end_date - timedelta(days=days_ago)
         
         # Random category (sometimes null/Uncategorized)
-        category_name = random.choice(list(categories.keys()))
         if random.random() < 0.1:  # 10% chance of no category
-            category_id = None  # Will be assigned to Uncategorized
+            category_name = "Uncategorized"
         else:
-            category_id = categories[category_name].id
+            category_name = random.choice(list(categories.keys()))
         
         # Random amount based on category
         if category_name in AMOUNT_RANGES:
@@ -174,7 +173,7 @@ def generate_expenses(db: Session, num_expenses: int, categories: dict):
             amount=amount,
             description=description,
             date=expense_date,
-            category_id=category_id
+            category=category_name  # Use category name string instead of category_id
         )
         expenses.append(expense)
     
@@ -209,7 +208,7 @@ def main():
         
         category_counts = {}
         for expense in expenses:
-            cat_name = expense.category.name if expense.category else "Uncategorized"
+            cat_name = expense.category if expense.category else "Uncategorized"
             if cat_name not in category_counts:
                 category_counts[cat_name] = 0
             category_counts[cat_name] += 1

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import config from '../config';
 
 function Expenses() {
   const [expenses, setExpenses] = useState([]);
+  const [filteredExpenses, setFilteredExpenses] = useState([]);
   const [categories, setCategories] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState(null);
@@ -14,18 +15,67 @@ function Expenses() {
     description: '',
     date: new Date().toISOString().split('T')[0],
   });
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(15);
+  const [totalPages, setTotalPages] = useState(1);
+  // Filtering state
+  const [yearFilter, setYearFilter] = useState('all');
+  const [availableYears, setAvailableYears] = useState([]);
+  // Loading state
+  const [isLoading, setIsLoading] = useState(false);
+  const [totalExpensesCount, setTotalExpensesCount] = useState(0);
 
   useEffect(() => {
     fetchExpenses();
     fetchCategories();
   }, []);
 
+  useEffect(() => {
+    // Apply filters and sorting
+    let filtered = [...expenses];
+    
+    // Apply year filter
+    if (yearFilter !== 'all') {
+      filtered = filtered.filter(expense => 
+        new Date(expense.date).getFullYear() === parseInt(yearFilter)
+      );
+    }
+    
+    // Sort by date (newest first)
+    filtered.sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    // Set filtered expenses
+    setFilteredExpenses(filtered);
+    setTotalExpensesCount(filtered.length);
+    
+    // Update total pages
+    setTotalPages(Math.ceil(filtered.length / itemsPerPage));
+    // Reset to page 1 when filters change
+    setCurrentPage(1);
+  }, [expenses, itemsPerPage, yearFilter]);
+
+  useEffect(() => {
+    // Extract available years from expenses
+    if (expenses.length > 0) {
+      const years = Array.from(
+        new Set(expenses.map(expense => new Date(expense.date).getFullYear()))
+      ).sort((a, b) => b - a); // Sort years in descending order
+      setAvailableYears(years);
+    }
+  }, [expenses]);
+
   const fetchExpenses = async () => {
     try {
-      const response = await axios.get(`${config.apiUrl}${config.endpoints.expenses}`);
+      setIsLoading(true);
+      // Request all expenses by specifying a large limit
+      const response = await axios.get(`${config.apiUrl}${config.endpoints.expenses}?limit=10000`);
+      console.log(`Loaded ${response.data.length} expenses from API`);
       setExpenses(response.data);
+      setIsLoading(false);
     } catch (error) {
       console.error('Error fetching expenses:', error);
+      setIsLoading(false);
     }
   };
 
@@ -90,74 +140,227 @@ function Expenses() {
     }
   };
 
+  // Navigation handlers
+  const goToNextPage = () => {
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const goToPrevPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  // Handle items per page change
+  const handleItemsPerPageChange = (e) => {
+    setItemsPerPage(Number(e.target.value));
+  };
+
+  // Handle year filter change
+  const handleYearFilterChange = (e) => {
+    setYearFilter(e.target.value);
+  };
+
+  // Get current expenses
+  const indexOfLastExpense = currentPage * itemsPerPage;
+  const indexOfFirstExpense = indexOfLastExpense - itemsPerPage;
+  const currentExpenses = filteredExpenses.slice(indexOfFirstExpense, indexOfLastExpense);
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <h2 className="text-2xl font-bold text-gray-900">Expenses</h2>
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="btn-primary inline-flex items-center"
-        >
-          <Plus className="h-5 w-5 mr-2" />
-          Add Expense
-        </button>
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Year Filter */}
+          <div className="flex items-center">
+            <label htmlFor="yearFilter" className="mr-2 text-sm text-gray-600">Year:</label>
+            <select
+              id="yearFilter"
+              value={yearFilter}
+              onChange={handleYearFilterChange}
+              className="border border-gray-300 rounded-md py-1 px-2 text-sm"
+            >
+              <option value="all">All Years</option>
+              {availableYears.map(year => (
+                <option key={year} value={year}>{year}</option>
+              ))}
+            </select>
+          </div>
+          
+          {/* Items Per Page */}
+          <div className="flex items-center">
+            <label htmlFor="itemsPerPage" className="mr-2 text-sm text-gray-600">Show:</label>
+            <select
+              id="itemsPerPage"
+              value={itemsPerPage}
+              onChange={handleItemsPerPageChange}
+              className="border border-gray-300 rounded-md py-1 px-2 text-sm"
+            >
+              <option value={15}>15</option>
+              <option value={25}>25</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+              <option value={500}>500</option>
+              <option value={1000}>All</option>
+            </select>
+          </div>
+          
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="btn-primary inline-flex items-center"
+          >
+            <Plus className="h-5 w-5 mr-2" />
+            Add Expense
+          </button>
+        </div>
       </div>
 
-      <div className="bg-white shadow-sm rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Date
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Category
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Description
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Amount
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {expenses.map((expense) => (
-              <tr key={expense.id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {new Date(expense.date).toLocaleDateString()}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {expense.category ? expense.category.name : 'Uncategorized'}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {expense.description}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  ${expense.amount.toFixed(2)}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <button
-                    onClick={() => handleEdit(expense)}
-                    className="text-blue-600 hover:text-blue-900 mr-4"
-                  >
-                    <Pencil className="h-5 w-5" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(expense.id)}
-                    className="text-red-600 hover:text-red-900"
-                  >
-                    <Trash2 className="h-5 w-5" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {isLoading ? (
+        <div className="bg-white rounded-lg p-6 text-center">
+          <div className="animate-pulse text-gray-500">Loading expenses...</div>
+        </div>
+      ) : filteredExpenses.length === 0 ? (
+        <div className="bg-white rounded-lg p-6 text-center text-gray-500">
+          {expenses.length === 0 ? (
+            "No expenses found. Add your first expense using the 'Add Expense' button."
+          ) : (
+            "No expenses match your current filters. Try changing your filter settings."
+          )}
+        </div>
+      ) : (
+        <>
+          <div className="bg-white shadow-sm rounded-lg overflow-hidden">
+            <div className="border-b border-gray-200 bg-gray-50 py-2 px-4 text-sm text-gray-500">
+              Showing {filteredExpenses.length} of {expenses.length} total expenses (newest first)
+            </div>
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Date
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Category
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Description
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Amount
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {currentExpenses.map((expense) => (
+                  <tr key={expense.id}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(expense.date).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {expense.category ? expense.category.name : 'Uncategorized'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {expense.description}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      ${expense.amount.toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => handleEdit(expense)}
+                        className="text-blue-600 hover:text-blue-900 mr-4"
+                      >
+                        <Pencil className="h-5 w-5" />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(expense.id)}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        <Trash2 className="h-5 w-5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-4 py-3 bg-white shadow-sm border border-gray-200 sm:px-6 rounded-lg">
+              <div className="flex-1 flex justify-between sm:hidden">
+                <button
+                  onClick={goToPrevPage}
+                  disabled={currentPage === 1}
+                  className={`relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${
+                    currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  Previous
+                </button>
+                <span className="mx-2 py-2 text-sm text-gray-700">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={goToNextPage}
+                  disabled={currentPage === totalPages}
+                  className={`ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md ${
+                    currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  Next
+                </button>
+              </div>
+              <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm text-gray-700">
+                    Showing <span className="font-medium">{indexOfFirstExpense + 1}</span> to{' '}
+                    <span className="font-medium">
+                      {indexOfLastExpense > filteredExpenses.length ? filteredExpenses.length : indexOfLastExpense}
+                    </span>{' '}
+                    of <span className="font-medium">{filteredExpenses.length}</span> expenses
+                  </p>
+                </div>
+                <div>
+                  <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                    <button
+                      onClick={goToPrevPage}
+                      disabled={currentPage === 1}
+                      className={`relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium ${
+                        currentPage === 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="sr-only">Previous</span>
+                      <ChevronLeft className="h-5 w-5" />
+                    </button>
+                    
+                    {/* Page numbers */}
+                    <span className="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                    
+                    <button
+                      onClick={goToNextPage}
+                      disabled={currentPage === totalPages}
+                      className={`relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium ${
+                        currentPage === totalPages ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:bg-gray-50'
+                      }`}
+                    >
+                      <span className="sr-only">Next</span>
+                      <ChevronRight className="h-5 w-5" />
+                    </button>
+                  </nav>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center">

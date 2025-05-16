@@ -1,10 +1,10 @@
 const config = {
-    apiUrl: 'http://localhost:8000/api',
+    apiUrl: 'http://localhost:8000',
     endpoints: {
         expenses: '/expenses',
         categories: '/categories',
         analytics: '/analytics/summary',
-        scanReceipt: '/receipts/scan'
+        scanReceipt: '/scan-receipt'
     }
 };
 
