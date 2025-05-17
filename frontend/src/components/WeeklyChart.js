@@ -26,46 +26,46 @@ ChartJS.register(
 const chartColor = 'rgba(75, 192, 192, 0.7)';
 const chartColorSolid = 'rgba(75, 192, 192, 1)';
 
-const WeeklyChart = ({ data }) => {
+const WeeklyChart = ({ data, dailyExpenses = [] }) => {
   if (!data || !Array.isArray(data) || data.length === 0) {
     return <div className="text-center text-gray-500">No data available for chart</div>;
   }
 
-  // Generate data for individual days of the last week
-  const generateDailyData = () => {
+  // Process and prepare the data for the chart
+  const processChartData = () => {    
+    if (dailyExpenses.length === 0) {
+      // Fallback: Generate empty day slots for the last 7 days
+      return generateEmptyDailyData();
+    }
+    
+    // Format the daily data for the chart
+    const chartData = dailyExpenses.map(day => {
+      const date = new Date(day.date);
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      
+      return {
+        date: date,
+        label: `${dayNames[date.getDay()]}, ${monthNames[date.getMonth()]} ${date.getDate()}`,
+        amount: day.total, // Use the actual daily total
+        expenses: day.expenses, // Store actual expense objects
+        chronologicalKey: day.chronologicalKey
+      };
+    });
+    
+    // Sort chronologically (left to right = oldest to newest)
+    return chartData.sort((a, b) => a.chronologicalKey - b.chronologicalKey);
+  };
+  
+  // Fallback function to generate empty days
+  const generateEmptyDailyData = () => {
     const dailyData = [];
     const today = new Date();
     
-    // Get base daily amount from the weekly data
-    let baseAmount = 100; // Default if no data available
-    if (data.length > 0) {
-      const mostRecentWeek = data.sort((a, b) => b.sortKey - a.sortKey)[0];
-      baseAmount = (mostRecentWeek.amount || 0) / 7;
-    }
-    
-    // Create a more realistic weekly spending pattern
-    // Typically higher on weekends and lower mid-week
-    const dayFactors = {
-      0: 1.3,  // Sunday: higher
-      1: 0.8,  // Monday: lower
-      2: 0.7,  // Tuesday: lower
-      3: 0.75, // Wednesday: lower
-      4: 0.9,  // Thursday: medium
-      5: 1.4,  // Friday: higher
-      6: 1.5   // Saturday: highest
-    };
-    
-    // Create data for each of the last 7 days
+    // Create entries for each of the last 7 days
     for (let i = 6; i >= 0; i--) {
       const date = new Date();
       date.setDate(today.getDate() - i);
-      
-      // Apply the day factor and a small random factor for natural variation
-      const dayOfWeek = date.getDay();
-      const dayFactor = dayFactors[dayOfWeek];
-      const randomVariation = 0.9 + (Math.random() * 0.2); // 0.9-1.1 random variation
-      
-      const dayAmount = baseAmount * dayFactor * randomVariation;
       
       // Format the date for display
       const day = date.getDate();
@@ -76,19 +76,24 @@ const WeeklyChart = ({ data }) => {
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const dayName = dayNames[date.getDay()];
       
+      // Create object with zero amount by default
       dailyData.push({
         date: date,
         label: `${dayName}, ${monthName} ${day}`,
-        amount: dayAmount,
-        sortKey: i // Higher numbers are older dates
+        amount: 0, // Default to zero for days with no expenses
+        chronologicalKey: 6 - i // 0 is oldest, 6 is newest
       });
     }
     
-    return dailyData.sort((a, b) => a.sortKey - b.sortKey);
+    return dailyData.sort((a, b) => a.chronologicalKey - b.chronologicalKey);
   };
   
-  const dailyData = generateDailyData();
-
+  // Get data for the chart
+  const dailyData = processChartData();
+  
+  // Calculate weekly total from daily totals for more accuracy
+  const calculatedTotal = dailyData.reduce((sum, day) => sum + parseFloat(day.amount || 0), 0).toFixed(2);
+  
   // Prepare data for the chart
   const chartData = {
     labels: dailyData.map(item => item.label),
@@ -98,7 +103,7 @@ const WeeklyChart = ({ data }) => {
       borderColor: chartColorSolid,
       backgroundColor: chartColor,
       pointBackgroundColor: chartColorSolid,
-      pointRadius: 0,
+      pointRadius: 3,
       pointHoverRadius: 8,
       tension: 0.2,
       borderWidth: 3,
@@ -128,7 +133,17 @@ const WeeklyChart = ({ data }) => {
         mode: 'index',
         callbacks: {
           label: function(context) {
-            return `$${context.parsed.y.toLocaleString(undefined, {maximumFractionDigits: 2})}`;
+            return `$${parseFloat(context.parsed.y).toFixed(2)}`;
+          },
+          afterLabel: function(context) {
+            // If we have details of the expenses, show them
+            const dayData = dailyData[context.dataIndex];
+            if (dayData.expenses && dayData.expenses.length > 0) {
+              return dayData.expenses.map(expense => 
+                `  • ${expense.description}: $${parseFloat(expense.amount).toFixed(2)}`
+              );
+            }
+            return '';
           }
         }
       }
@@ -185,8 +200,13 @@ const WeeklyChart = ({ data }) => {
   };
 
   return (
-    <div style={{ height: '280px', width: '100%' }}>
+    <div className="h-[280px] w-full">
       <Line data={chartData} options={options} />
+      {calculatedTotal > 0 && (
+        <div className="text-sm text-gray-500 text-center pt-2">
+          Weekly total: ${calculatedTotal}
+        </div>
+      )}
     </div>
   );
 };

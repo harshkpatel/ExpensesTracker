@@ -41,7 +41,7 @@ const chartColors = [
 ];
 
 function Analytics() {
-  const [timeRange, setTimeRange] = useState('month');
+  const [timeRange, setTimeRange] = useState('week');
   const [analyticsData, setAnalyticsData] = useState({
     totalExpenses: 0,
     categoryBreakdown: [],
@@ -61,81 +61,88 @@ function Analytics() {
       // Get analytics data for the selected time range
       const response = await axios.get(`${config.apiUrl}${config.endpoints.analytics}?time_range=${timeRange}`);
       
-      // Add weeklyTrends if it doesn't exist in the API response
-      if (!response.data.weeklyTrends) {
-        console.log('Adding mock weekly data');
-        // Create mock weekly data based on monthly data
-        const mockWeeklyData = [];
-        if (response.data.monthlyTrend) {
-          const now = new Date();
-          for (let i = 0; i < 4; i++) {
-            const weekStart = new Date();
-            weekStart.setDate(now.getDate() - (i * 7) - 6);
-            const weekEnd = new Date();
-            weekEnd.setDate(now.getDate() - (i * 7));
-            
-            mockWeeklyData.push({
-              week: `${weekStart.toLocaleDateString()} - ${weekEnd.toLocaleDateString()}`,
-              amount: response.data.monthlyTrend[0]?.total / 4 || 0,
-              sortKey: 4 - i
-            });
-          }
+      // Use dailyData directly from API if available
+      if (!response.data.dailyData && timeRange === 'week') {
+        // Fetch daily data only if needed and not already included
+        const allExpensesResponse = await axios.get(`${config.apiUrl}/expenses/?limit=10000`);
+        const allExpenses = allExpensesResponse.data || [];
+        
+        // Process daily expenses for the weekly chart
+        const now = new Date();
+        const dailyData = [];
+        
+        // Calculate date range for the last 7 days
+        for (let i = 6; i >= 0; i--) {
+          const currentDate = new Date();
+          currentDate.setDate(now.getDate() - i);
+          
+          // Format as YYYY-MM-DD for comparison
+          const dateString = currentDate.toISOString().split('T')[0];
+          
+          // Find all expenses for this date
+          const dayExpenses = allExpenses.filter(expense => 
+            expense.date === dateString
+          );
+          
+          // Calculate total for the day
+          const dayTotal = dayExpenses.reduce((sum, expense) => 
+            sum + parseFloat(expense.amount || 0), 0
+          );
+          
+          dailyData.push({
+            date: dateString,
+            expenses: dayExpenses,
+            total: dayTotal,
+            // Add data needed for chart display
+            dayOfWeek: currentDate.getDay(),
+            day: currentDate.getDate(),
+            month: currentDate.getMonth(),
+            chronologicalKey: 6 - i // 0 is oldest, 6 is newest
+          });
         }
-        response.data.weeklyTrends = mockWeeklyData;
+        
+        // Sort chronologically
+        const sortedDailyData = [...dailyData].sort((a, b) => a.chronologicalKey - b.chronologicalKey);
+        
+        // Add daily data to the response
+        response.data.dailyData = sortedDailyData;
       }
       
       setAnalyticsData(response.data);
 
-      // Let's calculate proper time-period specific total expenses based on trends data
+      // Calculate proper time-period specific total expenses based on trends data
       let periodTotal = 0;
       if (timeRange === 'week') {
-        // Weekly total from the weekly trend data
-        periodTotal = response.data.weeklyTrends.reduce((sum, week) => sum + week.amount, 0);
+        // Get weekly total from either daily data (most accurate) or weekly trends
+        if (response.data.dailyData && response.data.dailyData.length > 0) {
+          periodTotal = response.data.dailyData.reduce((sum, day) => sum + parseFloat(day.total || 0), 0);
+        } else if (response.data.weeklyTrends && response.data.weeklyTrends.length > 0) {
+          // Use the most recent week data
+          const mostRecentWeek = [...response.data.weeklyTrends].sort((a, b) => b.sortKey - a.sortKey)[0];
+          periodTotal = parseFloat(mostRecentWeek.amount || 0);
+        }
       } else if (timeRange === 'month') {
         // Use the monthly total as provided
-        periodTotal = response.data.totalExpenses;
+        periodTotal = parseFloat(response.data.totalExpenses || 0);
       } else {
         // Yearly total is the sum of all monthly data
-        periodTotal = response.data.monthlyTrend.reduce((sum, month) => sum + month.total, 0);
+        periodTotal = response.data.monthlyTrend && response.data.monthlyTrend.length > 0 
+          ? response.data.monthlyTrend.reduce((sum, month) => sum + parseFloat(month.total || 0), 0)
+          : 0;
       }
       
-      // If we have no data yet, use a reasonable estimate
-      if (periodTotal === 0) {
-        periodTotal = timeRange === 'week' ? 500 : 
-                      timeRange === 'month' ? 2000 : 24000;
-      }
+      // Round to 2 decimal places for consistency
+      periodTotal = parseFloat(periodTotal.toFixed(2));
       
       // Now adjust category data to match the period total while maintaining proportions
-      let categoryData = [...response.data.categoryBreakdown];
-      
-      if (categoryData.length > 0) {
-        // Calculate current total from categories
-        const currentCategoryTotal = categoryData.reduce((sum, cat) => sum + cat.total, 0);
-        
-        // If we have category data, scale it to match the period total
-        if (currentCategoryTotal > 0) {
-          const scaleFactor = periodTotal / currentCategoryTotal;
-          
-          categoryData = categoryData.map(cat => ({
-            ...cat,
-            total: cat.total * scaleFactor
-          }));
-        } else {
-          // If we have no category data, create some dummy data
-          categoryData = [
-            { category: 'Food', total: periodTotal * 0.3 },
-            { category: 'Transportation', total: periodTotal * 0.2 },
-            { category: 'Housing', total: periodTotal * 0.25 },
-            { category: 'Entertainment', total: periodTotal * 0.15 },
-            { category: 'Utilities', total: periodTotal * 0.1 }
-          ];
-        }
-      }
+      let categoryData = [...(response.data.categoryBreakdown || [])];
       
       // Sort by amount in descending order and keep only top categories
-      categoryData = categoryData
-        .sort((a, b) => b.total - a.total)
-        .slice(0, 8); // Limit to top 8 categories for cleaner display
+      if (categoryData.length > 0) {
+        categoryData = categoryData
+          .sort((a, b) => b.total - a.total)
+          .slice(0, 8); // Limit to top 8 categories for cleaner display
+      }
         
       setTimePeriodCategoryData(categoryData);
     } catch (error) {
@@ -166,7 +173,7 @@ function Analytics() {
   const categoryData = timePeriodCategoryData.length > 0 ? timePeriodCategoryData : [];
   
   // Calculate total expenses based on category data for this time period
-  const periodTotalExpenses = categoryData.reduce((sum, cat) => sum + cat.total, 0);
+  const periodTotalExpenses = parseFloat(categoryData.reduce((sum, cat) => sum + parseFloat(cat.total || 0), 0).toFixed(2));
   
   // Sort trend data chronologically using sortKey
   const sortedMonthlyData = [...monthlyData].sort((a, b) => a.month ? a.month.localeCompare(b.month) : 0);
@@ -344,123 +351,131 @@ function Analytics() {
           {trendData.length > 0 ? (
             <div className="h-[280px] relative">
               {timeRange === 'week' ? (
-                <WeeklyChart data={sortedWeeklyData} />
+                <WeeklyChart data={sortedWeeklyData} dailyExpenses={analyticsData.dailyData || []} />
               ) : timeRange === 'month' ? (
                 <MonthlyChart data={sortedMonthlyData} />
               ) : (
-                <Line
-                  data={{
-                    labels: limitedMonthlyData.map(item => {
-                      if (!item.month) return '';
-                      const [year, month] = item.month.split('-');
-                      
-                      // Convert month number to abbreviated month name
-                      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                      const monthIndex = parseInt(month) - 1;
-                      const monthName = monthNames[monthIndex] || month;
-                      
-                      // For yearly view, show just month names
-                      // For monthly view, show abbreviated month with year
-                      return timeRange === 'year' ? monthName : `${monthName}${year !== new Date().getFullYear().toString() ? ` '${year.slice(2)}` : ''}`;
-                    }),
-                    datasets: [{
-                      label: `${trendLabel} Expenses`,
-                      data: limitedMonthlyData.map(item => item.total),
-                      borderColor: chartColors[0].replace("0.7", "1"),
-                      backgroundColor: chartColors[0],
-                      pointBackgroundColor: chartColors[0].replace("0.7", "1"),
-                      pointRadius: 0,
-                      pointHoverRadius: 8,
-                      tension: 0.2,
-                      borderWidth: 3,
-                      fill: true
-                    }]
-                  }}
-                  options={{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                      legend: {
-                        display: false
-                      },
-                      tooltip: {
-                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                        padding: 12,
-                        bodyFont: {
-                          size: 14
+                <div className="h-[280px] w-full">
+                  <Line
+                    data={{
+                      labels: limitedMonthlyData.map(item => {
+                        if (!item.month) return '';
+                        // eslint-disable-next-line no-unused-vars
+                        const [year, month] = item.month.split('-');
+                        
+                        // Convert month number to abbreviated month name
+                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                        const monthIndex = parseInt(month) - 1;
+                        const monthName = monthNames[monthIndex] || month;
+                        
+                        // For yearly view, show just month names
+                        // For monthly view, show abbreviated month with year
+                        return timeRange === 'year' ? monthName : `${monthName}${year !== new Date().getFullYear().toString() ? ` '${year.slice(2)}` : ''}`;
+                      }),
+                      datasets: [{
+                        label: `${trendLabel} Expenses`,
+                        data: limitedMonthlyData.map(item => item.total),
+                        borderColor: chartColors[0].replace("0.7", "1"),
+                        backgroundColor: chartColors[0],
+                        pointBackgroundColor: chartColors[0].replace("0.7", "1"),
+                        pointRadius: 3,
+                        pointHoverRadius: 8,
+                        tension: 0.2,
+                        borderWidth: 3,
+                        fill: true
+                      }]
+                    }}
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: {
+                          display: false
                         },
-                        titleFont: {
-                          size: 14,
-                          weight: 'bold'
-                        },
-                        intersect: false,
-                        mode: 'index',
-                        callbacks: {
-                          label: function(context) {
-                            return `$${context.parsed.y.toLocaleString()}`;
+                        tooltip: {
+                          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                          padding: 12,
+                          bodyFont: {
+                            size: 14
                           },
-                          title: function(context) {
-                            // Enhance the tooltip title with more readable date
-                            if (timeRange === 'year') {
-                              return context[0].label;
-                            } else {
-                              return context[0].label;
+                          titleFont: {
+                            size: 14,
+                            weight: 'bold'
+                          },
+                          intersect: false,
+                          mode: 'index',
+                          callbacks: {
+                            label: function(context) {
+                              return `$${context.parsed.y.toLocaleString()}`;
+                            },
+                            title: function(context) {
+                              // Enhance the tooltip title with more readable date
+                              if (timeRange === 'year') {
+                                return context[0].label;
+                              } else {
+                                return context[0].label;
+                              }
                             }
                           }
                         }
-                      }
-                    },
-                    scales: {
-                      y: {
-                        beginAtZero: true,
-                        grid: {
-                          color: 'rgba(0, 0, 0, 0.05)'
-                        },
-                        border: {
-                          dash: [4, 4]
-                        },
-                        ticks: {
-                          font: {
-                            size: 12
+                      },
+                      scales: {
+                        y: {
+                          beginAtZero: true,
+                          grid: {
+                            color: 'rgba(0, 0, 0, 0.05)'
                           },
-                          callback: value => `$${value}`
+                          border: {
+                            dash: [4, 4]
+                          },
+                          ticks: {
+                            font: {
+                              size: 12
+                            },
+                            callback: value => `$${value}`
+                          }
+                        },
+                        x: {
+                          grid: {
+                            display: false
+                          },
+                          ticks: {
+                            font: {
+                              size: timeRange === 'year' ? 13 : 12,
+                              weight: '600'
+                            },
+                            maxRotation: timeRange === 'year' ? 0 : 30,
+                            minRotation: timeRange === 'year' ? 0 : 30,
+                            color: '#555',
+                            autoSkip: false,
+                            maxTicksLimit: timeRange === 'year' ? 12 : 6
+                          }
                         }
                       },
-                      x: {
-                        grid: {
-                          display: false
-                        },
-                        ticks: {
-                          font: {
-                            size: timeRange === 'year' ? 13 : 12,
-                            weight: '600'
-                          },
-                          maxRotation: timeRange === 'year' ? 0 : 30,
-                          minRotation: timeRange === 'year' ? 0 : 30,
-                          color: '#555',
-                          autoSkip: false,
-                          maxTicksLimit: timeRange === 'year' ? 12 : 6
+                      layout: {
+                        padding: {
+                          left: 5,
+                          right: 15,
+                          top: 20,
+                          bottom: timeRange === 'year' ? 10 : 15
                         }
+                      },
+                      interaction: {
+                        mode: 'index',
+                        intersect: false
+                      },
+                      hover: {
+                        mode: 'index',
+                        intersect: false
                       }
-                    },
-                    layout: {
-                      padding: {
-                        left: 5,
-                        right: 15,
-                        top: 20,
-                        bottom: timeRange === 'year' ? 10 : 15
-                      }
-                    },
-                    interaction: {
-                      mode: 'index',
-                      intersect: false
-                    },
-                    hover: {
-                      mode: 'index',
-                      intersect: false
-                    }
-                  }}
-                />
+                    }}
+                  />
+                  {limitedMonthlyData.length > 0 && (
+                    <div className="text-sm text-gray-500 text-center pt-2">
+                      Yearly total: ${limitedMonthlyData.reduce((sum, item) => sum + parseFloat(item.total || 0), 0).toFixed(2)}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           ) : (
@@ -512,8 +527,8 @@ function Analytics() {
                       callbacks: {
                         label: function(context) {
                           const label = context.label || '';
-                          const value = context.raw || 0;
-                          const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                          const value = parseFloat(context.raw || 0);
+                          const total = context.dataset.data.reduce((a, b) => parseFloat(a) + parseFloat(b), 0);
                           const percentage = Math.round((value / total) * 100);
                           return `${label}: $${value.toFixed(2)} (${percentage}%)`;
                         }

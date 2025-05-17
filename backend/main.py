@@ -176,7 +176,7 @@ async def delete_category(category_id: int, db: Session = Depends(get_db)):
 
 # Analytics endpoints
 @app.get("/analytics/summary")
-async def get_summary(db: Session = Depends(get_db)):
+async def get_summary(db: Session = Depends(get_db), time_range: str = "month"):
     # Get all expenses
     expenses = db.query(ExpenseModel).all()
     
@@ -217,6 +217,86 @@ async def get_summary(db: Session = Depends(get_db)):
         for expense in recent_expenses
     ]
     
+    # Create weekly trends data
+    weekly_trends = []
+    if time_range in ["week", "month", "year"]:
+        from datetime import datetime, timedelta
+        
+        # Get today and calculate dates for the last 4 weeks
+        today = datetime.now().date()
+        
+        for i in range(4):
+            # Calculate week end (most recent day of the week)
+            week_end = today - timedelta(days=i * 7)
+            # Calculate week start (7 days before week end)
+            week_start = week_end - timedelta(days=6)
+            
+            # Format for display
+            week_label = f"{week_start.strftime('%b %d')} - {week_end.strftime('%b %d')}"
+            
+            # Find expenses in this week
+            week_expenses = [
+                expense for expense in expenses 
+                if week_start <= expense.date <= week_end
+            ]
+            
+            # Calculate total for the week
+            week_total = sum(expense.amount for expense in week_expenses)
+            
+            weekly_trends.append({
+                "week": week_label,
+                "amount": week_total,
+                "sortKey": 4 - i  # Most recent week has highest sortKey
+            })
+    
+    # Create daily data for weekly view
+    daily_data = []
+    if time_range == "week":
+        from datetime import datetime, timedelta
+        
+        # Get today and 7 days ago
+        today = datetime.now().date()
+        week_ago = today - timedelta(days=6)
+        
+        # Query expenses for the last 7 days
+        weekly_expenses = db.query(ExpenseModel).filter(
+            ExpenseModel.date >= week_ago,
+            ExpenseModel.date <= today
+        ).all()
+        
+        # Group by date
+        daily_totals = {}
+        daily_expenses = {}
+        
+        for expense in weekly_expenses:
+            date_str = expense.date.isoformat()
+            if date_str not in daily_totals:
+                daily_totals[date_str] = 0
+                daily_expenses[date_str] = []
+            
+            daily_totals[date_str] += expense.amount
+            daily_expenses[date_str].append({
+                "id": expense.id,
+                "amount": expense.amount,
+                "category": expense.category,
+                "description": expense.description
+            })
+        
+        # Create array of daily data
+        for i in range(7):
+            current_date = week_ago + timedelta(days=i)
+            date_str = current_date.isoformat()
+            
+            daily_data.append({
+                "date": date_str,
+                "total": daily_totals.get(date_str, 0),
+                "expenses": daily_expenses.get(date_str, []),
+                "day_of_week": current_date.weekday(),
+                "day": current_date.day,
+                "month": current_date.month, 
+                "chronological_key": i  # 0 is oldest, 6 is newest
+            })
+    
     # Generate optimization suggestions
     suggestions = []
     if total_expenses > 1000:
@@ -224,13 +304,20 @@ async def get_summary(db: Session = Depends(get_db)):
     if len(category_breakdown) > 5:
         suggestions.append("You have many expense categories. Consider consolidating similar categories")
     
-    return {
+    result = {
         "totalExpenses": total_expenses,
         "categoryBreakdown": category_breakdown,
         "monthlyTrend": monthly_trend,
+        "weeklyTrends": weekly_trends,
         "recentExpenses": recent_expenses_list,
         "optimizationSuggestions": suggestions
     }
+    
+    # Add daily data if in weekly view
+    if daily_data:
+        result["dailyData"] = daily_data
+    
+    return result
 
 # Receipt scanning endpoint
 @app.post("/scan-receipt/", response_model=OCRResult)
