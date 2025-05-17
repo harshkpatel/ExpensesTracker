@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Dashboard from './pages/Dashboard';
 import Expenses from './pages/Expenses';
-import ScanReceipt from './pages/ScanReceipt';
 import Analytics from './pages/Analytics';
 import Settings from './pages/Settings';
 
@@ -16,7 +15,6 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/expenses" element={<Expenses />} />
-            <Route path="/scan" element={<ScanReceipt />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>

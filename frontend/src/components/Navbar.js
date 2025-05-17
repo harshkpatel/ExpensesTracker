@@ -1,11 +1,10 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Receipt, Camera, BarChart2, Settings } from 'lucide-react';
+import { Home, Receipt, BarChart2, Settings } from 'lucide-react';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: Home },
   { name: 'Expenses', href: '/expenses', icon: Receipt },
-  { name: 'Scan Receipt', href: '/scan', icon: Camera },
   { name: 'Analytics', href: '/analytics', icon: BarChart2 },
   { name: 'Settings', href: '/settings', icon: Settings },
 ];

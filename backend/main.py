@@ -7,13 +7,6 @@ import sqlite3
 import os
 import json
 from datetime import datetime, date
-import cv2
-import numpy as np
-import pytesseract
-from PIL import Image
-import io
-import re
-import uuid
 import shutil
 from pathlib import Path
 from sqlalchemy import create_engine, Column, Integer, String, Float, Date, ForeignKey
@@ -94,10 +87,6 @@ class Expense(ExpenseBase):
     
     class Config:
         orm_mode = True
-
-class OCRResult(BaseModel):
-    text: str
-    extracted_data: Dict[str, Any]
 
 # Dependency
 def get_db():
@@ -355,78 +344,6 @@ async def get_summary(db: Session = Depends(get_db), time_range: str = "month"):
         result["dailyData"] = daily_data
     
     return result
-
-# Receipt scanning endpoint
-@app.post("/scan-receipt/", response_model=OCRResult)
-async def scan_receipt(file: UploadFile = File(...)):
-    if not file.content_type.startswith('image/'):
-        raise HTTPException(status_code=400, detail="File must be an image")
-    
-    # Save uploaded file temporarily
-    temp_file_path = UPLOAD_DIR / f"{uuid.uuid4()}{os.path.splitext(file.filename)[1]}"
-    
-    try:
-        with open(temp_file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
-        # Perform OCR on the image
-        image = Image.open(temp_file_path)
-        ocr_text = pytesseract.image_to_string(image)
-        
-        # Extract information from the OCR text
-        extracted_data = extract_receipt_data(ocr_text)
-        
-        return {
-            "text": ocr_text,
-            "extracted_data": extracted_data
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error processing image: {str(e)}")
-    finally:
-        # Clean up temporary file
-        if os.path.exists(temp_file_path):
-            os.remove(temp_file_path)
-
-def extract_receipt_data(text):
-    """Extract relevant data from OCR text"""
-    # Initialize with default values
-    data = {
-        "total": None,
-        "date": None,
-        "merchant": None,
-        "items": []
-    }
-    
-    # Extract total amount
-    total_pattern = r"(?i)total\s*:?\s*\$?\s*(\d+\.?\d*)"
-    total_match = re.search(total_pattern, text)
-    if total_match:
-        data["total"] = float(total_match.group(1))
-    
-    # Extract date
-    date_pattern = r"\d{1,2}[/-]\d{1,2}[/-]\d{2,4}"
-    date_match = re.search(date_pattern, text)
-    if date_match:
-        data["date"] = date_match.group(0)
-    
-    # Extract merchant name (usually at the top of the receipt)
-    lines = text.split('\n')
-    if lines:
-        data["merchant"] = lines[0].strip()
-    
-    # Extract items (lines with prices)
-    item_pattern = r"(.+?)\s+\$?\s*(\d+\.?\d*)"
-    for line in lines:
-        item_match = re.search(item_pattern, line)
-        if item_match:
-            item_name = item_match.group(1).strip()
-            item_price = float(item_match.group(2))
-            data["items"].append({
-                "name": item_name,
-                "price": item_price
-            })
-    
-    return data
 
 @app.get("/ml/optimize")
 async def get_optimization_suggestions(db: Session = Depends(get_db)):

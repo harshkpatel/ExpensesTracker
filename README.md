@@ -9,7 +9,6 @@ A modern, locally-hosted web application for tracking personal expenses with pow
 - 📈 Real-time analytics with time period filtering (weekly, monthly, yearly)
 - 🔍 Automatic category-based expense breakdowns and trends
 - 💸 Budget tracking with visual progress indicators
-- 📷 Receipt scanning capabilities (text extraction from images)
 - 💾 Local data storage with SQLite (privacy-focused)
 - 📤 Data import/export functionality
 
@@ -19,7 +18,6 @@ A modern, locally-hosted web application for tracking personal expenses with pow
 - **Backend**: Python with FastAPI
 - **Database**: SQLite
 - **Data Visualization**: Chart.js with customized components
-- **Receipt OCR**: Tesseract OCR
 - **Icons**: Lucide React
 
 ## Screenshot Gallery
@@ -165,14 +163,6 @@ The Dashboard provides an overview of your financial activity:
 2. Add new expense categories as needed
 3. Remove unused categories
 
-### Receipt Scanning
-
-1. Navigate to the "Scan" tab
-2. Upload a clear image of your receipt
-3. Review the automatically extracted data
-4. Edit any incorrect information
-5. Click "Save" to add the expense
-
 ### Data Import/Export
 
 1. Navigate to the "Settings" tab
@@ -192,7 +182,6 @@ The backend provides RESTful API endpoints for all functionalities:
 - `POST /categories/` - Create a new category
 - `DELETE /categories/{id}` - Delete a category
 - `GET /analytics/summary` - Get time-specific spending summary and statistics
-- `POST /scan-receipt/` - OCR scan a receipt image
 - `GET /export` - Export all data
 - `POST /import` - Import data
 
@@ -206,9 +195,6 @@ pydantic==2.4.2
 python-multipart==0.0.6
 sqlalchemy==2.0.25
 pillow==10.0.1
-pytesseract==0.3.10
-opencv-python==4.8.1.78
-numpy==1.26.0
 
 # Frontend
 React 18.2.0
