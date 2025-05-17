@@ -112,39 +112,72 @@ function Analytics() {
 
       // Calculate proper time-period specific total expenses based on trends data
       let periodTotal = 0;
+      
+      // Filter expenses and categories based on time range 
+      // For weekly view, we want to filter categories to only show this week's data
+      let filteredCategoryData = [];
+      
       if (timeRange === 'week') {
         // Get weekly total from either daily data (most accurate) or weekly trends
         if (response.data.dailyData && response.data.dailyData.length > 0) {
           periodTotal = response.data.dailyData.reduce((sum, day) => sum + parseFloat(day.total || 0), 0);
+          
+          // Create category breakdown from daily data
+          const categoryTotals = {};
+          
+          // Process all expenses from daily data to generate time-specific categories
+          response.data.dailyData.forEach(day => {
+            if (day.expenses && day.expenses.length > 0) {
+              day.expenses.forEach(expense => {
+                if (!categoryTotals[expense.category]) {
+                  categoryTotals[expense.category] = 0;
+                }
+                categoryTotals[expense.category] += parseFloat(expense.amount || 0);
+              });
+            }
+          });
+          
+          // Convert to array format matching API response
+          filteredCategoryData = Object.keys(categoryTotals).map(category => ({
+            category: category,
+            total: parseFloat(categoryTotals[category].toFixed(2))
+          }));
         } else if (response.data.weeklyTrends && response.data.weeklyTrends.length > 0) {
           // Use the most recent week data
           const mostRecentWeek = [...response.data.weeklyTrends].sort((a, b) => b.sortKey - a.sortKey)[0];
           periodTotal = parseFloat(mostRecentWeek.amount || 0);
+          
+          // If we don't have daily data but have the category breakdown, we use it as is
+          // This is less accurate but better than nothing
+          filteredCategoryData = [...(response.data.categoryBreakdown || [])];
         }
       } else if (timeRange === 'month') {
         // Use the monthly total as provided
         periodTotal = parseFloat(response.data.totalExpenses || 0);
+        
+        // For monthly view, we use the API provided category breakdown
+        filteredCategoryData = [...(response.data.categoryBreakdown || [])];
       } else {
         // Yearly total is the sum of all monthly data
         periodTotal = response.data.monthlyTrend && response.data.monthlyTrend.length > 0 
           ? response.data.monthlyTrend.reduce((sum, month) => sum + parseFloat(month.total || 0), 0)
           : 0;
+          
+        // For yearly view, we use the API provided category breakdown
+        filteredCategoryData = [...(response.data.categoryBreakdown || [])];
       }
       
       // Round to 2 decimal places for consistency
       periodTotal = parseFloat(periodTotal.toFixed(2));
       
-      // Now adjust category data to match the period total while maintaining proportions
-      let categoryData = [...(response.data.categoryBreakdown || [])];
-      
       // Sort by amount in descending order and keep only top categories
-      if (categoryData.length > 0) {
-        categoryData = categoryData
+      if (filteredCategoryData.length > 0) {
+        filteredCategoryData = filteredCategoryData
           .sort((a, b) => b.total - a.total)
           .slice(0, 8); // Limit to top 8 categories for cleaner display
       }
         
-      setTimePeriodCategoryData(categoryData);
+      setTimePeriodCategoryData(filteredCategoryData);
     } catch (error) {
       console.error('Error fetching analytics:', error);
       setError('Failed to load analytics data');
@@ -378,7 +411,7 @@ function Analytics() {
                         borderColor: chartColors[0].replace("0.7", "1"),
                         backgroundColor: chartColors[0],
                         pointBackgroundColor: chartColors[0].replace("0.7", "1"),
-                        pointRadius: 3,
+                        pointRadius: 0,
                         pointHoverRadius: 8,
                         tension: 0.2,
                         borderWidth: 3,

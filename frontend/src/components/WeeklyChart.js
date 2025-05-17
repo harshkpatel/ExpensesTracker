@@ -103,7 +103,7 @@ const WeeklyChart = ({ data, dailyExpenses = [] }) => {
       borderColor: chartColorSolid,
       backgroundColor: chartColor,
       pointBackgroundColor: chartColorSolid,
-      pointRadius: 3,
+      pointRadius: 0,
       pointHoverRadius: 8,
       tension: 0.2,
       borderWidth: 3,
