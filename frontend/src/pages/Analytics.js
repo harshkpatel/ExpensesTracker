@@ -13,9 +13,8 @@ import {
 } from 'chart.js';
 import { Line, Pie } from 'react-chartjs-2';
 import config from '../config';
-import SimpleMonthlyChart from '../components/SimpleMonthlyChart';
-import MonthlyBarChart from '../components/MonthlyBarChart';
 import WeeklyChart from '../components/WeeklyChart';
+import MonthlyChart from '../components/MonthlyChart';
 
 ChartJS.register(
   CategoryScale,
@@ -28,20 +27,17 @@ ChartJS.register(
   ArcElement
 );
 
-// Array of colors for charts
+// Define a better color palette
 const chartColors = [
-  'rgb(255, 99, 132)',
-  'rgb(54, 162, 235)',
-  'rgb(255, 206, 86)',
-  'rgb(75, 192, 192)',
-  'rgb(153, 102, 255)',
-  'rgb(255, 159, 64)',
-  'rgb(201, 203, 207)',
-  'rgb(255, 99, 71)',
-  'rgb(46, 139, 87)',
-  'rgb(106, 90, 205)',
-  'rgb(255, 69, 0)',
-  'rgb(60, 179, 113)'
+  'rgba(53, 162, 235, 0.7)',
+  'rgba(75, 192, 192, 0.7)',
+  'rgba(255, 159, 64, 0.7)',
+  'rgba(255, 99, 132, 0.7)',
+  'rgba(153, 102, 255, 0.7)',
+  'rgba(255, 205, 86, 0.7)',
+  'rgba(54, 162, 235, 0.7)',
+  'rgba(201, 203, 207, 0.7)',
+  'rgba(255, 145, 65, 0.7)',
 ];
 
 function Analytics() {
@@ -55,18 +51,12 @@ function Analytics() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [showAlternativeChart, setShowAlternativeChart] = useState(false);
 
   const fetchAnalytics = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
       const response = await axios.get(`${config.apiUrl}${config.endpoints.analytics}?time_range=${timeRange}`);
-      console.log('Analytics data:', response.data);
-      console.log('Weekly data:', response.data.weeklyTrends);
-      console.log('Monthly data:', response.data.monthlyTrends);
-      console.log('Monthly data old key:', response.data.monthlyTrend);
-      console.log('Category data:', response.data.categoryBreakdown);
       
       // Add weeklyTrends if it doesn't exist in the API response
       if (!response.data.weeklyTrends) {
@@ -116,42 +106,37 @@ function Analytics() {
   const monthlyData = analyticsData.monthlyTrend || analyticsData.monthlyTrends || [];
   const weeklyData = analyticsData.weeklyTrends || [];
   const categoryData = analyticsData.categoryBreakdown || [];
-
-  console.log('Accessed monthlyData:', monthlyData);
-  console.log('Accessed weeklyData:', weeklyData);
-  console.log('Accessed categoryData:', categoryData);
   
   // Sort trend data chronologically using sortKey
   const sortedMonthlyData = [...monthlyData].sort((a, b) => a.month ? a.month.localeCompare(b.month) : 0);
   const sortedWeeklyData = [...weeklyData].sort((a, b) => a.sortKey - b.sortKey);
 
+  // Limit monthly data to the last 6 data points for better visualization
+  const limitedMonthlyData = timeRange === 'month' ? 
+    sortedMonthlyData.slice(-6) : 
+    (timeRange === 'year' ? sortedMonthlyData.slice(-12) : sortedMonthlyData);
+
   // Determine which trend data to show based on time range
-  const trendData = timeRange === 'week' ? sortedWeeklyData : sortedMonthlyData;
-  const trendLabel = timeRange === 'week' ? 'Weekly' : 'Monthly';
+  const trendData = timeRange === 'week' ? sortedWeeklyData : limitedMonthlyData;
+  const trendLabel = timeRange === 'week' ? 'Weekly' : timeRange === 'month' ? 'Monthly' : 'Yearly';
 
   return (
     <div className="container mx-auto p-4 max-w-full overflow-hidden">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Analytics Dashboard</h1>
-        <div className="flex space-x-4">
+        <div className="relative inline-block">
           <select
             value={timeRange}
             onChange={(e) => setTimeRange(e.target.value)}
-            className="p-2 border rounded"
+            className="p-2 border rounded appearance-none pr-8 bg-white"
           >
             <option value="week">Last Week</option>
             <option value="month">Last Month</option>
             <option value="year">Last Year</option>
           </select>
-          
-          {timeRange === 'month' && (
-            <button 
-              onClick={() => setShowAlternativeChart(!showAlternativeChart)} 
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-            >
-              {showAlternativeChart ? 'Show Line Chart' : 'Show Simple Chart'}
-            </button>
-          )}
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+          </div>
         </div>
       </div>
 
@@ -165,84 +150,128 @@ function Analytics() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow-sm h-[400px]">
+        <div className="bg-white p-4 rounded-lg shadow-sm h-[350px]">
           <h2 className="text-xl font-bold mb-4">{trendLabel} Trend</h2>
           {trendData.length > 0 ? (
-            <div className="h-[300px] relative">
-              {timeRange === 'month' ? (
-                showAlternativeChart ? (
-                  <SimpleMonthlyChart data={sortedMonthlyData} />
-                ) : (
-                  <Line
-                    data={{
-                      labels: sortedMonthlyData.map(item => {
-                        try {
-                          if (item.month) {
-                            const [year, month] = item.month.split('-');
-                            return `${month}/${year.slice(2)}`;
-                          } else {
-                            return 'Unknown';
-                          }
-                        } catch (e) {
-                          console.error("Error formatting month label:", e, item);
-                          return 'Unknown';
-                        }
-                      }),
-                      datasets: [{
-                        label: 'Monthly Expenses',
-                        data: sortedMonthlyData.map(item => {
-                          // Handle potential missing total property
-                          if (item.total !== undefined) {
-                            return item.total;
-                          } else if (item.amount !== undefined) {
-                            return item.amount;
-                          } else {
-                            console.error("Missing total/amount in item:", item);
-                            return 0;
-                          }
-                        }),
-                        borderColor: 'rgb(53, 162, 235)',
-                        backgroundColor: 'rgba(53, 162, 235, 0.1)',
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 5,
-                        pointHoverRadius: 8
-                      }]
-                    }}
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        legend: {
-                          position: 'top',
+            <div className="h-[280px] relative">
+              {timeRange === 'week' ? (
+                <WeeklyChart data={sortedWeeklyData} />
+              ) : timeRange === 'month' ? (
+                <MonthlyChart data={sortedMonthlyData} />
+              ) : (
+                <Line
+                  data={{
+                    labels: limitedMonthlyData.map(item => {
+                      if (!item.month) return '';
+                      const [year, month] = item.month.split('-');
+                      
+                      // Convert month number to abbreviated month name
+                      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                      const monthIndex = parseInt(month) - 1;
+                      const monthName = monthNames[monthIndex] || month;
+                      
+                      // For yearly view, show just month names
+                      // For monthly view, show abbreviated month with year
+                      return timeRange === 'year' ? monthName : `${monthName}${year !== new Date().getFullYear().toString() ? ` '${year.slice(2)}` : ''}`;
+                    }),
+                    datasets: [{
+                      label: `${trendLabel} Expenses`,
+                      data: limitedMonthlyData.map(item => item.total),
+                      borderColor: chartColors[0].replace("0.7", "1"),
+                      backgroundColor: chartColors[0],
+                      pointBackgroundColor: chartColors[0].replace("0.7", "1"),
+                      pointRadius: 0,
+                      pointHoverRadius: 8,
+                      tension: 0.2,
+                      borderWidth: 3,
+                      fill: true
+                    }]
+                  }}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: {
+                        display: false
+                      },
+                      tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                        padding: 12,
+                        bodyFont: {
+                          size: 14
                         },
-                        tooltip: {
-                          callbacks: {
-                            label: function(context) {
-                              return `$${context.parsed.y.toLocaleString()}`;
+                        titleFont: {
+                          size: 14,
+                          weight: 'bold'
+                        },
+                        intersect: false,
+                        mode: 'index',
+                        callbacks: {
+                          label: function(context) {
+                            return `$${context.parsed.y.toLocaleString()}`;
+                          },
+                          title: function(context) {
+                            // Enhance the tooltip title with more readable date
+                            if (timeRange === 'year') {
+                              return context[0].label;
+                            } else {
+                              return context[0].label;
                             }
                           }
                         }
-                      },
-                      scales: {
-                        y: {
-                          beginAtZero: true,
-                          ticks: {
-                            callback: value => `$${value}`
-                          }
+                      }
+                    },
+                    scales: {
+                      y: {
+                        beginAtZero: true,
+                        grid: {
+                          color: 'rgba(0, 0, 0, 0.05)'
                         },
-                        x: {
-                          ticks: {
-                            maxRotation: 45,
-                            minRotation: 45
-                          }
+                        border: {
+                          dash: [4, 4]
+                        },
+                        ticks: {
+                          font: {
+                            size: 12
+                          },
+                          callback: value => `$${value}`
+                        }
+                      },
+                      x: {
+                        grid: {
+                          display: false
+                        },
+                        ticks: {
+                          font: {
+                            size: timeRange === 'year' ? 13 : 12,
+                            weight: '600'
+                          },
+                          maxRotation: timeRange === 'year' ? 0 : 30,
+                          minRotation: timeRange === 'year' ? 0 : 30,
+                          color: '#555',
+                          autoSkip: false,
+                          maxTicksLimit: timeRange === 'year' ? 12 : 6
                         }
                       }
-                    }}
-                  />
-                )
-              ) : (
-                <WeeklyChart data={sortedWeeklyData} />
+                    },
+                    layout: {
+                      padding: {
+                        left: 5,
+                        right: 15,
+                        top: 20,
+                        bottom: timeRange === 'year' ? 10 : 15
+                      }
+                    },
+                    interaction: {
+                      mode: 'index',
+                      intersect: false
+                    },
+                    hover: {
+                      mode: 'index',
+                      intersect: false
+                    }
+                  }}
+                />
               )}
             </div>
           ) : (
@@ -250,17 +279,20 @@ function Analytics() {
           )}
         </div>
 
-        <div className="bg-white p-4 rounded-lg shadow-sm h-[400px]">
+        <div className="bg-white p-4 rounded-lg shadow-sm h-[350px]">
           <h2 className="text-xl font-bold mb-4">Category Breakdown</h2>
           {categoryData.length > 0 ? (
-            <div className="h-[300px] relative">
+            <div className="h-[280px] relative">
               <Pie
                 data={{
                   labels: categoryData.map(item => item.category),
                   datasets: [{
                     data: categoryData.map(item => item.total),
                     backgroundColor: chartColors.slice(0, categoryData.length),
-                    borderWidth: 1
+                    borderColor: chartColors.map(color => color.replace('0.7', '1')),
+                    borderWidth: 2,
+                    hoverOffset: 15,
+                    hoverBorderWidth: 3
                   }]
                 }}
                 options={{
@@ -271,15 +303,23 @@ function Analytics() {
                       position: 'right',
                       display: true,
                       labels: {
-                        boxWidth: 12,
-                        padding: 10
+                        usePointStyle: true,
+                        boxWidth: 10,
+                        padding: 15,
+                        font: {
+                          size: 12
+                        }
                       }
                     },
                     title: {
-                      display: true,
-                      text: 'Expenses by Category'
+                      display: false
                     },
                     tooltip: {
+                      backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                      padding: 12,
+                      bodyFont: {
+                        size: 14
+                      },
                       callbacks: {
                         label: function(context) {
                           const label = context.label || '';
@@ -290,9 +330,11 @@ function Analytics() {
                         }
                       }
                     }
-                  }
+                  },
+                  cutout: '45%',
+                  radius: '90%'
                 }}
-                height={300}
+                height={280}
               />
             </div>
           ) : (
@@ -335,17 +377,13 @@ function Analytics() {
               <div className="mb-4">
                 <h3 className="text-lg font-semibold text-gray-800 mb-2">Month-over-Month Trends</h3>
                 {(() => {
-                  console.log("Month-over-Month Analysis data:", monthlyData);
-                  
                   // Check if data has the expected format
                   if (!monthlyData[0].hasOwnProperty('month') || !monthlyData[0].hasOwnProperty('total')) {
-                    console.error("Monthly data missing required properties:", monthlyData[0]);
                     return <p>Unable to display trends due to data format issues</p>;
                   }
                   
                   const sortedMonths = [...monthlyData].sort((a, b) => {
                     if (!a.month || !b.month) {
-                      console.log("Missing month property:", a, b);
                       return 0;
                     }
                     return a.month.localeCompare(b.month);
@@ -380,14 +418,12 @@ function Analytics() {
                               </p>
                             );
                           } catch (e) {
-                            console.error("Error calculating 3-month average:", e);
                             return null;
                           }
                         })()}
                       </>
                     );
                   } catch (e) {
-                    console.error("Error in month-over-month calculations:", e);
                     return <p>Unable to calculate trends due to data issues</p>;
                   }
                 })()}
@@ -402,7 +438,6 @@ function Analytics() {
                   try {
                     // Check if data has expected structure
                     if (!monthlyData[0].hasOwnProperty('month') || !monthlyData[0].hasOwnProperty('total')) {
-                      console.error("Spending patterns: Monthly data missing required properties");
                       return null;
                     }
                     
@@ -414,7 +449,7 @@ function Analytics() {
                       const date = new Date(parseInt(year), parseInt(month) - 1);
                       displayDate = date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
                     } catch (e) {
-                      console.error("Error formatting date:", e);
+                      // Fallback to default
                     }
                     
                     return (
@@ -423,7 +458,6 @@ function Analytics() {
                       </li>
                     );
                   } catch (e) {
-                    console.error("Error in highest month calculation:", e);
                     return null;
                   }
                 })()}
@@ -441,7 +475,6 @@ function Analytics() {
                       </li>
                     );
                   } catch (e) {
-                    console.error("Error in category calculation:", e);
                     return null;
                   }
                 })()}
@@ -463,4 +496,4 @@ function Analytics() {
   );
 }
 
-export default Analytics; 
+export default Analytics;
