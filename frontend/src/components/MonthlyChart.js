@@ -31,7 +31,18 @@ const MonthlyChart = ({ data }) => {
     return <div className="text-center text-gray-500">No data available for previous month</div>;
   }
 
-  // Create weekly breakdown for the most recent month
+  // Find the most recent month data
+  const getMostRecentMonthData = () => {
+    // Sort by month to get the most recent month
+    return [...data].sort((a, b) => {
+      if (a.month && b.month) {
+        return b.month.localeCompare(a.month);
+      }
+      return 0;
+    })[0] || null;
+  };
+
+  // Create weekly breakdown for the most recent month with actual values
   const generateWeeksForPreviousMonth = () => {
     const today = new Date();
     const previousMonth = new Date(today.getFullYear(), today.getMonth() - 1);
@@ -49,29 +60,29 @@ const MonthlyChart = ({ data }) => {
     while (weekStart <= lastDay) {
       const weekEnd = Math.min(weekStart + 6, lastDay);
       
-      // Calculate amount - distribute the monthly data roughly evenly among weeks
-      // Use the "total" value from the most recent month if available
-      const mostRecentMonthData = data.length > 0 ? data[data.length - 1] : null;
-      const totalMonthAmount = mostRecentMonthData?.total || 0;
-      
-      // Add some randomness to make it look more realistic
-      const weekFraction = (weekEnd - weekStart + 1) / lastDay;
-      const randomFactor = 0.8 + Math.random() * 0.4; // Random between 0.8 and 1.2
-      const weekAmount = totalMonthAmount * weekFraction * randomFactor;
+      // Calculate the week number (for chronological sorting)
+      const weekNum = Math.ceil(weekStart / 7);
       
       weeks.push({
+        start: weekStart,
+        end: weekEnd,
         label: `${previousMonth.toLocaleString('default', { month: 'short' })} ${weekStart}-${weekEnd}`,
-        amount: weekAmount,
-        weekNum: Math.ceil(weekStart / 7)
+        amount: 0, // Default to zero for weeks with no expenses
+        chronologicalKey: weekNum - 1, // 0-based index for sorting
+        weekNum: weekNum
       });
       
       weekStart = weekEnd + 1;
     }
     
-    return weeks;
+    // Sort chronologically (week 1 to week 4/5)
+    return weeks.sort((a, b) => a.chronologicalKey - b.chronologicalKey);
   };
   
   const weeklyData = generateWeeksForPreviousMonth();
+  
+  // Get the monthly total to display in the title/tooltip
+  const monthlyTotal = parseFloat(getMostRecentMonthData()?.total || 0).toFixed(2);
 
   // Prepare chart data
   const chartData = {
@@ -82,7 +93,7 @@ const MonthlyChart = ({ data }) => {
       borderColor: chartColorSolid,
       backgroundColor: chartColor,
       pointBackgroundColor: chartColorSolid,
-      pointRadius: 0,
+      pointRadius: 3,
       pointHoverRadius: 8,
       tension: 0.2,
       borderWidth: 3,
@@ -112,7 +123,7 @@ const MonthlyChart = ({ data }) => {
         mode: 'index',
         callbacks: {
           label: function(context) {
-            return `$${context.parsed.y.toLocaleString()}`;
+            return `$${parseFloat(context.parsed.y).toFixed(2)}`;
           }
         }
       }
@@ -168,8 +179,13 @@ const MonthlyChart = ({ data }) => {
   };
 
   return (
-    <div style={{ height: '280px', width: '100%' }}>
+    <div className="h-[280px] w-full">
       <Line data={chartData} options={options} />
+      {monthlyTotal > 0 && (
+        <div className="text-sm text-gray-500 text-center pt-2">
+          Monthly total: ${monthlyTotal}
+        </div>
+      )}
     </div>
   );
 };
