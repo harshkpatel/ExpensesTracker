@@ -1,98 +1,110 @@
 # Personal Expenses Tracker
 
-A locally-hosted web application for tracking personal expenses with receipt scanning and ML-based optimization features.
+A modern, locally-hosted web application for tracking personal expenses with powerful analytics and intuitive visualizations.
 
 ## Features
 
-- 📝 Basic expense entry and tracking
-- 📊 Analytics dashboard with spending breakdowns
-- 📷 Receipt scanning with automatic data extraction
-- 🔍 Item categorization (manual and automatic)
-- ✏️ Editing capabilities for all expense data
-- 💾 Local data storage (SQLite database)
-- 🧠 ML features for cost optimization
+- 📊 Interactive dashboard with spending insights and budget tracking
+- 📝 Comprehensive expense management (add, edit, delete, categorize)
+- 📈 Real-time analytics with time period filtering (weekly, monthly, yearly)
+- 🔍 Automatic category-based expense breakdowns and trends
+- 💸 Budget tracking with visual progress indicators
+- 📷 Receipt scanning capabilities (text extraction from images)
+- 💾 Local data storage with SQLite (privacy-focused)
 - 📤 Data import/export functionality
 
 ## Tech Stack
 
-- **Frontend**: React.js with Tailwind CSS
+- **Frontend**: React.js with Tailwind CSS and Chart.js
 - **Backend**: Python with FastAPI
 - **Database**: SQLite
+- **Data Visualization**: Chart.js with customized components
 - **Receipt OCR**: Tesseract OCR
-- **Machine Learning**: Basic algorithms (expandable)
+- **Icons**: Lucide React
 
-## Setup Instructions
+## Screenshot Gallery
+
+[Consider adding screenshots of the application here]
+
+## Complete Setup Instructions
 
 ### Prerequisites
 
-- Python 3.8+
-- Node.js 14+
-- npm or yarn
-- Tesseract OCR
+- Python 3.8+ (recommended: Python 3.11)
+- Node.js 16+ and npm
+- Git
 
-### Backend Setup
+### Step 1: Clone the Repository
 
-1. Clone the repository
-   ```
-   git clone https://github.com/yourusername/expenses-tracker.git
-   cd expenses-tracker
-   ```
+```bash
+git clone https://github.com/yourusername/expenses-tracker.git
+cd expenses-tracker
+```
 
-2. Create a virtual environment and activate it
-   ```
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+### Step 2: Backend Setup
 
-3. Install Python dependencies
-   ```
-   pip install -r requirements.txt
-   ```
+1. Create and activate a Python virtual environment:
 
-4. Install Tesseract OCR (required for receipt scanning)
+```bash
+# Create virtual environment
+python -m venv venv
 
-   **On Ubuntu/Debian:**
-   ```
-   sudo apt update
-   sudo apt install tesseract-ocr
-   ```
+# Activate on Windows
+venv\Scripts\activate
 
-   **On macOS:**
-   ```
-   brew install tesseract
-   ```
+# Activate on macOS/Linux
+source venv/bin/activate
+```
 
-   **On Windows:**
-   Download and install from https://github.com/UB-Mannheim/tesseract/wiki
+2. Install Python dependencies:
 
-5. Start the backend server
-   ```
-   cd backend
-   uvicorn main:app --reload
-   ```
-   The API will be available at http://localhost:8000
+```bash
+pip install -r requirements.txt
+```
 
-### Frontend Setup
+3. Initialize the database (creates a new empty database if not present):
 
-1. Navigate to the frontend directory
-   ```
-   cd frontend
-   ```
+```bash
+cd backend
+python -c "from main import Base, engine; Base.metadata.create_all(bind=engine)"
+```
 
-2. Install dependencies
-   ```
-   npm install
-   # or
-   yarn install
-   ```
+4. Start the backend server:
 
-3. Start the development server
-   ```
-   npm start
-   # or
-   yarn start
-   ```
-   The application will be available at http://localhost:3000
+```bash
+python -m uvicorn main:app --reload
+```
+
+The API will be available at http://localhost:8000
+
+### Step 3: Frontend Setup
+
+1. Open a new terminal window and navigate to the frontend directory:
+
+```bash
+cd frontend
+```
+
+2. Install dependencies:
+
+```bash
+npm install
+```
+
+3. Start the development server:
+
+```bash
+npm start
+```
+
+The application will be available at http://localhost:3000
+
+### Step 4: Initial Configuration (New Users)
+
+1. Access the application at http://localhost:3000
+2. Go to the "Categories" tab and add some expense categories (e.g., Groceries, Rent, Transportation)
+3. Start adding your expenses on the "Expenses" tab
+4. View your spending insights on the Dashboard page
 
 ## Project Structure
 
@@ -100,9 +112,11 @@ A locally-hosted web application for tracking personal expenses with receipt sca
 expenses-tracker/
 ├── backend/
 │   ├── main.py           # FastAPI application
-│   ├── requirements.txt  # Python dependencies
+│   ├── src/
+│   │   └── db/           # Database models and configuration
 │   ├── data/             # SQLite database storage
-│   └── uploads/          # Temporary storage for receipt images
+│   ├── uploads/          # Temporary storage for receipt images
+│   └── requirements.txt  # Python dependencies
 ├── frontend/
 │   ├── public/
 │   ├── src/
@@ -114,47 +128,62 @@ expenses-tracker/
 │   ├── package.json
 │   └── tailwind.config.js
 └── README.md
+```
 
 ## Usage Guide
 
-### Adding Expenses
+### Dashboard
+
+The Dashboard provides an overview of your financial activity:
+- Monthly budget progress with color-coded indicators
+- Month-over-month spending comparison
+- Top spending categories
+- Daily average expenditure
+- Monthly trend chart
+- Category breakdown visualization
+- Recent transactions list
+
+### Managing Expenses
 
 1. Navigate to the "Expenses" tab
-2. Fill in the expense details (amount, category, description, date)
-3. Click "Add Expense"
+2. Add a new expense by clicking the "Add Expense" button
+3. Fill in the expense details (amount, category, description, date)
+4. Use the year filter and pagination to browse through your expense history
+5. Edit or delete expenses as needed
 
-### Scanning Receipts
+### Using Analytics
 
-1. Navigate to the "Scan Receipt" tab
-2. Upload an image of your receipt
+1. Navigate to the "Analytics" tab
+2. Select a time period (week, month, year) using the dropdown
+3. View spending trends through the interactive charts
+4. Analyze category breakdowns for the selected time period
+5. Review insights and spending patterns specific to the selected time range
+
+### Managing Categories
+
+1. Navigate to the "Categories" tab
+2. Add new expense categories as needed
+3. Remove unused categories
+
+### Receipt Scanning
+
+1. Navigate to the "Scan" tab
+2. Upload a clear image of your receipt
 3. Review the automatically extracted data
 4. Edit any incorrect information
 5. Click "Save" to add the expense
 
-### Viewing Analytics
-
-1. Navigate to the "Analytics" tab
-2. Use the time period filter to view spending for different time frames
-3. Analyze your spending patterns by category
-4. View ML-powered suggestions for optimization (appears after sufficient data)
-
-### Managing Categories
-
-1. Navigate to the "Settings" tab
-2. Add new expense categories
-3. Remove unused categories
-
-### Import/Export Data
+### Data Import/Export
 
 1. Navigate to the "Settings" tab
 2. Click "Export Data" to download your expense database
 3. Click "Import Data" to upload a previously exported database
 
-## API Endpoints
+## API Endpoints Reference
 
-The backend provides the following RESTful API endpoints:
+The backend provides RESTful API endpoints for all functionalities:
 
-- `GET /expenses/` - List all expenses with filtering options
+- `GET /expenses/` - List all expenses with pagination and filtering
 - `POST /expenses/` - Create a new expense
 - `GET /expenses/{id}` - Get a specific expense
 - `PUT /expenses/{id}` - Update an expense
@@ -162,13 +191,12 @@ The backend provides the following RESTful API endpoints:
 - `GET /categories/` - List all categories
 - `POST /categories/` - Create a new category
 - `DELETE /categories/{id}` - Delete a category
-- `GET /analytics/summary` - Get spending summary and statistics
+- `GET /analytics/summary` - Get time-specific spending summary and statistics
 - `POST /scan-receipt/` - OCR scan a receipt image
-- `GET /ml/optimize` - Get ML-based optimization suggestions
 - `GET /export` - Export all data
 - `POST /import` - Import data
 
-## Requirements
+## Dependency Requirements
 
 ```
 # Backend
@@ -176,6 +204,7 @@ fastapi==0.104.1
 uvicorn==0.23.2
 pydantic==2.4.2
 python-multipart==0.0.6
+sqlalchemy==2.0.25
 pillow==10.0.1
 pytesseract==0.3.10
 opencv-python==4.8.1.78
@@ -184,18 +213,19 @@ numpy==1.26.0
 # Frontend
 React 18.2.0
 Tailwind CSS 3.3.3
+Chart.js 4.4.0
 lucide-react 0.263.1
 ```
 
-## Future Enhancements
+## Planned Future Enhancements
 
-- Mobile app version
-- Cloud sync options
-- Budget setting and alerts
-- Advanced ML models for better prediction
-- Receipt scan improvements
+- Mobile app version with responsive design
+- Cloud synchronization options
+- Advanced budget planning and alerts
 - Multiple currency support
-- Financial goal tracking
+- Financial goal setting and tracking
+- Enhanced machine learning for spending pattern prediction
+- Dark mode support
 
 ## Contributing
 

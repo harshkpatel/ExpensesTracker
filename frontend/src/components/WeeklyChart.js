@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -27,99 +27,82 @@ const chartColor = 'rgba(75, 192, 192, 0.7)';
 const chartColorSolid = 'rgba(75, 192, 192, 1)';
 
 const WeeklyChart = ({ data, dailyExpenses = [] }) => {
+  const chartRef = useRef(null);
+  
+  // Cleanup chart instance on unmount to prevent memory leaks
+  useEffect(() => {
+    // No operation on mount
+    return () => {
+      // Capture the current value of chartRef for cleanup to fix the React Hook warning
+      const chart = chartRef.current;
+      if (chart && chart.chartInstance) {
+        chart.chartInstance.destroy();
+      }
+    };
+  }, []);
+
   if (!data || !Array.isArray(data) || data.length === 0) {
     return <div className="text-center text-gray-500">No data available for chart</div>;
   }
 
   // Process and prepare the data for the chart
-  const processChartData = () => {    
-    if (dailyExpenses.length === 0) {
-      // Fallback: Generate empty day slots for the last 7 days
-      return generateEmptyDailyData();
+  const getDailyData = () => {
+    // If we have daily data from the API, use it
+    if (dailyExpenses && dailyExpenses.length > 0) {
+      // Sort by chronological key to ensure proper ordering
+      return [...dailyExpenses].sort((a, b) => a.chronological_key - b.chronological_key);
     }
     
-    // Format the daily data for the chart
-    const chartData = dailyExpenses.map(day => {
-      const date = new Date(day.date);
-      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      
-      return {
-        date: date,
-        label: `${dayNames[date.getDay()]}, ${monthNames[date.getMonth()]} ${date.getDate()}`,
-        amount: day.total, // Use the actual daily total
-        expenses: day.expenses, // Store actual expense objects
-        chronologicalKey: day.chronologicalKey
-      };
-    });
-    
-    // Sort chronologically (left to right = oldest to newest)
-    return chartData.sort((a, b) => a.chronologicalKey - b.chronologicalKey);
+    return [];
   };
-  
-  // Fallback function to generate empty days
-  const generateEmptyDailyData = () => {
-    const dailyData = [];
-    const today = new Date();
+
+  const dailyData = getDailyData();
+
+  // Function to format date label properly
+  const formatDateLabel = (date) => {
+    if (!date) return '';
     
-    // Create entries for each of the last 7 days
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(today.getDate() - i);
-      
-      // Format the date for display
-      const day = date.getDate();
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const monthName = monthNames[date.getMonth()];
-      
-      // Get day name
-      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      const dayName = dayNames[date.getDay()];
-      
-      // Create object with zero amount by default
-      dailyData.push({
-        date: date,
-        label: `${dayName}, ${monthName} ${day}`,
-        amount: 0, // Default to zero for days with no expenses
-        chronologicalKey: 6 - i // 0 is oldest, 6 is newest
-      });
+    try {
+      const d = new Date(date);
+      // Format as Day of week (e.g., "Mon")
+      return d.toLocaleDateString('en-US', { weekday: 'short' });
+    } catch (e) {
+      console.error('Error formatting date', e);
+      return date;
     }
-    
-    return dailyData.sort((a, b) => a.chronologicalKey - b.chronologicalKey);
   };
-  
-  // Get data for the chart
-  const dailyData = processChartData();
-  
-  // Calculate weekly total from daily totals for more accuracy
-  const calculatedTotal = dailyData.reduce((sum, day) => sum + parseFloat(day.amount || 0), 0).toFixed(2);
-  
+
+  // Calculate weekly total for display
+  const weeklyTotal = dailyData.reduce((sum, day) => sum + parseFloat(day.total || 0), 0).toFixed(2);
+
   // Prepare data for the chart
   const chartData = {
-    labels: dailyData.map(item => item.label),
+    labels: dailyData.map(item => formatDateLabel(item.date)),
     datasets: [{
       label: 'Daily Expenses',
-      data: dailyData.map(item => item.amount),
+      data: dailyData.map(item => item.total),
       borderColor: chartColorSolid,
       backgroundColor: chartColor,
       pointBackgroundColor: chartColorSolid,
-      pointRadius: 0,
-      pointHoverRadius: 8,
+      pointRadius: 0, // Hide points by default
+      pointHoverRadius: 8, // Show points on hover
       tension: 0.2,
       borderWidth: 3,
       fill: true
     }]
   };
 
-  // Improved chart options
+  // Chart options
   const options = {
     responsive: true,
     maintainAspectRatio: false,
+    resizeDelay: 100, // Add delay to prevent excessive redraws
     plugins: {
       legend: {
         display: false
       },
       tooltip: {
+        enabled: true,
         backgroundColor: 'rgba(0, 0, 0, 0.8)',
         padding: 12,
         bodyFont: {
@@ -135,16 +118,29 @@ const WeeklyChart = ({ data, dailyExpenses = [] }) => {
           label: function(context) {
             return `$${parseFloat(context.parsed.y).toFixed(2)}`;
           },
-          afterLabel: function(context) {
-            // If we have details of the expenses, show them
-            const dayData = dailyData[context.dataIndex];
-            if (dayData.expenses && dayData.expenses.length > 0) {
-              return dayData.expenses.map(expense => 
-                `  • ${expense.description}: $${parseFloat(expense.amount).toFixed(2)}`
-              );
+          title: function(context) {
+            if (context[0].dataIndex >= 0 && context[0].dataIndex < dailyData.length) {
+              const item = dailyData[context[0].dataIndex];
+              if (item && item.date) {
+                try {
+                  const date = new Date(item.date);
+                  return date.toLocaleDateString('en-US', { 
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                  });
+                } catch (e) {
+                  return context[0].label;
+                }
+              }
             }
-            return '';
+            return context[0].label;
           }
+        },
+        // Prevent tooltips from causing excessive redraws
+        animation: {
+          duration: 0
         }
       }
     },
@@ -171,22 +167,19 @@ const WeeklyChart = ({ data, dailyExpenses = [] }) => {
         },
         ticks: {
           font: {
-            size: 11,
-            weight: '600' 
+            size: 12,
+            weight: '600'
           },
-          color: '#555',
-          maxRotation: 30,
-          minRotation: 30,
-          padding: 5
+          color: '#555'
         }
       }
     },
     layout: {
       padding: {
-        left: 0,
-        right: 10,
+        left: 5,
+        right: 15,
         top: 20,
-        bottom: 10
+        bottom: 15
       }
     },
     interaction: {
@@ -195,16 +188,29 @@ const WeeklyChart = ({ data, dailyExpenses = [] }) => {
     },
     hover: {
       mode: 'index',
-      intersect: false
+      intersect: false,
+      // Prevent continuous redraws on hover
+      animationDuration: 0
+    },
+    animation: {
+      duration: 300 // Reduce animation duration to prevent excessive rendering
+    },
+    // Prevent chart from growing beyond its container
+    elements: {
+      line: {
+        tension: 0.2
+      }
     }
   };
 
   return (
-    <div className="h-[280px] w-full">
-      <Line data={chartData} options={options} />
-      {calculatedTotal > 0 && (
+    <div className="h-[280px] w-full overflow-hidden">
+      <div className="chart-container h-full w-full">
+        <Line ref={chartRef} data={chartData} options={options} />
+      </div>
+      {weeklyTotal > 0 && (
         <div className="text-sm text-gray-500 text-center pt-2">
-          Weekly total: ${calculatedTotal}
+          Weekly total: ${weeklyTotal}
         </div>
       )}
     </div>

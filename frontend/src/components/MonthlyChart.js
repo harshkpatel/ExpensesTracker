@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -26,67 +26,68 @@ ChartJS.register(
 const chartColor = 'rgba(53, 162, 235, 0.7)';
 const chartColorSolid = 'rgba(53, 162, 235, 1)';
 
-const MonthlyChart = ({ data }) => {
-  if (!data || !Array.isArray(data) || data.length === 0) {
+const MonthlyChart = ({ data, weeklyTrends = [] }) => {
+  const chartRef = useRef(null);
+  
+  // Cleanup chart instance on unmount to prevent memory leaks
+  useEffect(() => {
+    // No operation on mount
+    return () => {
+      // Capture the current value of chartRef for cleanup to fix the React Hook warning
+      const chart = chartRef.current;
+      if (chart && chart.chartInstance) {
+        chart.chartInstance.destroy();
+      }
+    };
+  }, []);
+
+  if ((!data || !Array.isArray(data) || data.length === 0) && 
+      (!weeklyTrends || !Array.isArray(weeklyTrends) || weeklyTrends.length === 0)) {
     return <div className="text-center text-gray-500">No data available for previous month</div>;
   }
 
-  // Find the most recent month data
-  const getMostRecentMonthData = () => {
-    // Sort by month to get the most recent month
-    return [...data].sort((a, b) => {
-      if (a.month && b.month) {
-        return b.month.localeCompare(a.month);
-      }
-      return 0;
-    })[0] || null;
-  };
-
-  // Create weekly breakdown for the most recent month with actual values
-  const generateWeeksForPreviousMonth = () => {
-    const today = new Date();
-    const previousMonth = new Date(today.getFullYear(), today.getMonth() - 1);
-    const year = previousMonth.getFullYear();
-    const month = previousMonth.getMonth();
-    
-    // Get the last day of the previous month
-    const lastDay = new Date(year, month + 1, 0).getDate();
-    
-    // Create an array of weeks for the previous month
-    const weeks = [];
-    let weekStart = 1;
-    
-    // Generate 4-5 weeks for the month
-    while (weekStart <= lastDay) {
-      const weekEnd = Math.min(weekStart + 6, lastDay);
-      
-      // Calculate the week number (for chronological sorting)
-      const weekNum = Math.ceil(weekStart / 7);
-      
-      weeks.push({
-        start: weekStart,
-        end: weekEnd,
-        label: `${previousMonth.toLocaleString('default', { month: 'short' })} ${weekStart}-${weekEnd}`,
-        amount: 0, // Default to zero for weeks with no expenses
-        chronologicalKey: weekNum - 1, // 0-based index for sorting
-        weekNum: weekNum
-      });
-      
-      weekStart = weekEnd + 1;
+  // Use the weekly trends to show actual weekly data
+  const getWeeklyData = () => {
+    // Return the last 4 weeks from weekly trends, sorted chronologically
+    if (weeklyTrends && weeklyTrends.length > 0) {
+      return [...weeklyTrends]
+        .sort((a, b) => a.sortKey - b.sortKey)  // Sort chronologically from oldest to newest
+        .slice(0, 4); // Get the last 4 weeks of data
     }
     
-    // Sort chronologically (week 1 to week 4/5)
-    return weeks.sort((a, b) => a.chronologicalKey - b.chronologicalKey);
+    return [];
   };
+
+  const weeklyData = getWeeklyData();
   
-  const weeklyData = generateWeeksForPreviousMonth();
+  // Calculate total monthly expenses from the weekly data
+  const monthlyTotal = weeklyData.reduce((sum, week) => sum + parseFloat(week.amount || 0), 0).toFixed(2);
   
-  // Get the monthly total to display in the title/tooltip
-  const monthlyTotal = parseFloat(getMostRecentMonthData()?.total || 0).toFixed(2);
+  // Format week labels to be more concise
+  const formatWeekLabel = (label) => {
+    if (!label) return '';
+    // Extract just the dates from the week label (e.g., "Jan 01 - Jan 07" -> "01-07")
+    const parts = label.split(' - ');
+    if (parts.length !== 2) return label;
+    
+    const startParts = parts[0].split(' ');
+    const endParts = parts[1].split(' ');
+    
+    if (startParts.length >= 2 && endParts.length >= 2) {
+      // Same month - "Feb 01-07"
+      if (startParts[0] === endParts[0]) {
+        return `${startParts[0]} ${startParts[1]}-${endParts[1]}`;
+      } 
+      // Different months - "Jan 25-Feb 01"
+      return `${startParts[0]} ${startParts[1]}-${endParts[0]} ${endParts[1]}`;
+    }
+    
+    return label;
+  };
 
   // Prepare chart data
   const chartData = {
-    labels: weeklyData.map(item => item.label),
+    labels: weeklyData.map(item => formatWeekLabel(item.week)),
     datasets: [{
       label: 'Weekly Expenses',
       data: weeklyData.map(item => item.amount),
@@ -105,11 +106,13 @@ const MonthlyChart = ({ data }) => {
   const options = {
     responsive: true,
     maintainAspectRatio: false,
+    resizeDelay: 100, // Add delay to prevent excessive redraws
     plugins: {
       legend: {
         display: false
       },
       tooltip: {
+        enabled: true,
         backgroundColor: 'rgba(0, 0, 0, 0.8)',
         padding: 12,
         bodyFont: {
@@ -125,6 +128,10 @@ const MonthlyChart = ({ data }) => {
           label: function(context) {
             return `$${parseFloat(context.parsed.y).toFixed(2)}`;
           }
+        },
+        // Prevent tooltips from causing excessive redraws
+        animation: {
+          duration: 0
         }
       }
     },
@@ -174,13 +181,26 @@ const MonthlyChart = ({ data }) => {
     },
     hover: {
       mode: 'index',
-      intersect: false
+      intersect: false,
+      // Prevent continuous redraws on hover
+      animationDuration: 0
+    },
+    animation: {
+      duration: 300 // Reduce animation duration to prevent excessive rendering
+    },
+    // Prevent chart from growing beyond its container
+    elements: {
+      line: {
+        tension: 0.2
+      }
     }
   };
 
   return (
-    <div className="h-[280px] w-full">
-      <Line data={chartData} options={options} />
+    <div className="h-[280px] w-full overflow-hidden">
+      <div className="chart-container h-full w-full">
+        <Line ref={chartRef} data={chartData} options={options} />
+      </div>
       {monthlyTotal > 0 && (
         <div className="text-sm text-gray-500 text-center pt-2">
           Monthly total: ${monthlyTotal}

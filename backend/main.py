@@ -178,14 +178,50 @@ async def delete_category(category_id: int, db: Session = Depends(get_db)):
 @app.get("/analytics/summary")
 async def get_summary(db: Session = Depends(get_db), time_range: str = "month"):
     # Get all expenses
-    expenses = db.query(ExpenseModel).all()
+    all_expenses = db.query(ExpenseModel).all()
     
-    # Calculate total expenses
-    total_expenses = sum(expense.amount for expense in expenses)
+    # Calculate total expenses for all time (used for some suggestions)
+    total_expenses = sum(expense.amount for expense in all_expenses)
     
-    # Calculate category breakdown
+    # Filter expenses by time range
+    filtered_expenses = []
+    from datetime import datetime, timedelta
+    
+    # Get today's date
+    today = datetime.now().date()
+    
+    # Filter expenses based on time range
+    if time_range == "week":
+        # Last 7 days
+        start_date = today - timedelta(days=6)
+        filtered_expenses = [
+            expense for expense in all_expenses
+            if expense.date >= start_date and expense.date <= today
+        ]
+    elif time_range == "month":
+        # Last 30 days
+        start_date = today - timedelta(days=29)
+        filtered_expenses = [
+            expense for expense in all_expenses
+            if expense.date >= start_date and expense.date <= today
+        ]
+    elif time_range == "year":
+        # Last 365 days
+        start_date = today - timedelta(days=364)
+        filtered_expenses = [
+            expense for expense in all_expenses
+            if expense.date >= start_date and expense.date <= today
+        ]
+    else:
+        # Default to all expenses
+        filtered_expenses = all_expenses
+    
+    # Calculate time-specific total
+    period_total = sum(expense.amount for expense in filtered_expenses)
+    
+    # Calculate category breakdown based on filtered expenses
     category_totals = {}
-    for expense in expenses:
+    for expense in filtered_expenses:
         category_totals[expense.category] = category_totals.get(expense.category, 0) + expense.amount
     
     category_breakdown = [
@@ -193,12 +229,23 @@ async def get_summary(db: Session = Depends(get_db), time_range: str = "month"):
         for category, total in category_totals.items()
     ]
     
-    # Calculate monthly trend
+    # Calculate monthly trend based on time range
     monthly_totals = {}
-    for expense in expenses:
-        month = expense.date.strftime("%Y-%m")
-        monthly_totals[month] = monthly_totals.get(month, 0) + expense.amount
     
+    # Use different expenses data based on time range
+    if time_range == "year":
+        # For yearly view, only include months in the last 365 days
+        for expense in filtered_expenses:
+            month = expense.date.strftime("%Y-%m")
+            monthly_totals[month] = monthly_totals.get(month, 0) + expense.amount
+    else:
+        # For other views, include all historical months for context
+        # but ensure we return the filtered total for the current period
+        for expense in all_expenses:
+            month = expense.date.strftime("%Y-%m")
+            monthly_totals[month] = monthly_totals.get(month, 0) + expense.amount
+    
+    # Sort by month chronologically
     monthly_trend = [
         {"month": month, "total": total}
         for month, total in sorted(monthly_totals.items())
@@ -220,11 +267,7 @@ async def get_summary(db: Session = Depends(get_db), time_range: str = "month"):
     # Create weekly trends data
     weekly_trends = []
     if time_range in ["week", "month", "year"]:
-        from datetime import datetime, timedelta
-        
         # Get today and calculate dates for the last 4 weeks
-        today = datetime.now().date()
-        
         for i in range(4):
             # Calculate week end (most recent day of the week)
             week_end = today - timedelta(days=i * 7)
@@ -236,7 +279,7 @@ async def get_summary(db: Session = Depends(get_db), time_range: str = "month"):
             
             # Find expenses in this week
             week_expenses = [
-                expense for expense in expenses 
+                expense for expense in all_expenses 
                 if week_start <= expense.date <= week_end
             ]
             
@@ -252,17 +295,11 @@ async def get_summary(db: Session = Depends(get_db), time_range: str = "month"):
     # Create daily data for weekly view
     daily_data = []
     if time_range == "week":
-        from datetime import datetime, timedelta
-        
-        # Get today and 7 days ago
-        today = datetime.now().date()
+        # Get 7 days ago
         week_ago = today - timedelta(days=6)
         
         # Query expenses for the last 7 days
-        weekly_expenses = db.query(ExpenseModel).filter(
-            ExpenseModel.date >= week_ago,
-            ExpenseModel.date <= today
-        ).all()
+        weekly_expenses = [e for e in all_expenses if week_ago <= e.date <= today]
         
         # Group by date
         daily_totals = {}
@@ -305,7 +342,7 @@ async def get_summary(db: Session = Depends(get_db), time_range: str = "month"):
         suggestions.append("You have many expense categories. Consider consolidating similar categories")
     
     result = {
-        "totalExpenses": total_expenses,
+        "totalExpenses": period_total,  # Now returns period-specific total instead of all-time total
         "categoryBreakdown": category_breakdown,
         "monthlyTrend": monthly_trend,
         "weeklyTrends": weekly_trends,

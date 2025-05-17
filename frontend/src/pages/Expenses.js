@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Plus, Pencil, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
 import config from '../config';
+import { EventEmitter } from 'events';
+
+// Create a global event emitter that can be exported and used by other components
+export const expenseEventEmitter = new EventEmitter();
 
 function Expenses() {
   const [expenses, setExpenses] = useState([]);
@@ -134,6 +138,9 @@ function Expenses() {
       try {
         await axios.delete(`${config.apiUrl}${config.endpoints.expenses}/${id}`);
         fetchExpenses();
+        
+        // Emit an event that other components can listen to
+        expenseEventEmitter.emit('expenseDeleted', id);
       } catch (error) {
         console.error('Error deleting expense:', error);
       }

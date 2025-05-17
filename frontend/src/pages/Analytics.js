@@ -15,6 +15,7 @@ import { Line, Pie } from 'react-chartjs-2';
 import config from '../config';
 import WeeklyChart from '../components/WeeklyChart';
 import MonthlyChart from '../components/MonthlyChart';
+import { expenseEventEmitter } from './Expenses';
 
 ChartJS.register(
   CategoryScale,
@@ -111,17 +112,11 @@ function Analytics() {
       setAnalyticsData(response.data);
 
       // Calculate proper time-period specific total expenses based on trends data
-      let periodTotal = 0;
-      
-      // Filter expenses and categories based on time range 
-      // For weekly view, we want to filter categories to only show this week's data
       let filteredCategoryData = [];
       
       if (timeRange === 'week') {
         // Get weekly total from either daily data (most accurate) or weekly trends
         if (response.data.dailyData && response.data.dailyData.length > 0) {
-          periodTotal = response.data.dailyData.reduce((sum, day) => sum + parseFloat(day.total || 0), 0);
-          
           // Create category breakdown from daily data
           const categoryTotals = {};
           
@@ -143,32 +138,17 @@ function Analytics() {
             total: parseFloat(categoryTotals[category].toFixed(2))
           }));
         } else if (response.data.weeklyTrends && response.data.weeklyTrends.length > 0) {
-          // Use the most recent week data
-          const mostRecentWeek = [...response.data.weeklyTrends].sort((a, b) => b.sortKey - a.sortKey)[0];
-          periodTotal = parseFloat(mostRecentWeek.amount || 0);
-          
           // If we don't have daily data but have the category breakdown, we use it as is
           // This is less accurate but better than nothing
           filteredCategoryData = [...(response.data.categoryBreakdown || [])];
         }
       } else if (timeRange === 'month') {
-        // Use the monthly total as provided
-        periodTotal = parseFloat(response.data.totalExpenses || 0);
-        
         // For monthly view, we use the API provided category breakdown
         filteredCategoryData = [...(response.data.categoryBreakdown || [])];
       } else {
-        // Yearly total is the sum of all monthly data
-        periodTotal = response.data.monthlyTrend && response.data.monthlyTrend.length > 0 
-          ? response.data.monthlyTrend.reduce((sum, month) => sum + parseFloat(month.total || 0), 0)
-          : 0;
-          
         // For yearly view, we use the API provided category breakdown
         filteredCategoryData = [...(response.data.categoryBreakdown || [])];
       }
-      
-      // Round to 2 decimal places for consistency
-      periodTotal = parseFloat(periodTotal.toFixed(2));
       
       // Sort by amount in descending order and keep only top categories
       if (filteredCategoryData.length > 0) {
@@ -188,6 +168,20 @@ function Analytics() {
 
   useEffect(() => {
     fetchAnalytics();
+    
+    // Add listener for expense deletion
+    const handleExpenseDeleted = () => {
+      // Refresh analytics data when an expense is deleted
+      fetchAnalytics();
+    };
+    
+    // Subscribe to expense events
+    expenseEventEmitter.on('expenseDeleted', handleExpenseDeleted);
+    
+    // Cleanup subscription when component unmounts
+    return () => {
+      expenseEventEmitter.removeListener('expenseDeleted', handleExpenseDeleted);
+    };
   }, [fetchAnalytics]);
 
   if (loading) {
@@ -217,8 +211,7 @@ function Analytics() {
     sortedMonthlyData.slice(-6) : 
     (timeRange === 'year' ? sortedMonthlyData.slice(-12) : sortedMonthlyData);
 
-  // Determine which trend data to show based on time range
-  const trendData = timeRange === 'week' ? sortedWeeklyData : limitedMonthlyData;
+  // Define trendLabel without relying on unused trendData variable
   const trendLabel = timeRange === 'week' ? 'Weekly' : timeRange === 'month' ? 'Monthly' : 'Yearly';
   
   // Get time-specific period description
@@ -350,63 +343,123 @@ function Analytics() {
   const insights = getTimeSpecificInsights();
 
   return (
-    <div className="container mx-auto p-4 max-w-full overflow-hidden">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Analytics Dashboard</h1>
-        <div className="relative inline-block">
-          <select
-            value={timeRange}
-            onChange={(e) => setTimeRange(e.target.value)}
-            className="p-2 border rounded appearance-none pr-8 bg-white"
-          >
-            <option value="week">Last Week</option>
-            <option value="month">Last Month</option>
-            <option value="year">Last Year</option>
-          </select>
-          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-            <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+    <div className="container mx-auto p-4 max-w-6xl">
+      <h1 className="text-2xl font-bold mb-6">Analytics Dashboard</h1>
+      
+      <div className="flex flex-wrap items-center gap-4 mb-6">
+        <select 
+          value={timeRange} 
+          onChange={e => setTimeRange(e.target.value)}
+          className="px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white shadow-sm text-sm"
+        >
+          <option value="week">Last 7 Days</option>
+          <option value="month">Last 30 Days</option>
+          <option value="year">Last 12 Months</option>
+        </select>
+      </div>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        {/* Overview Card */}
+        <div className="bg-white p-4 rounded-lg shadow-md">
+          <h2 className="text-lg font-semibold mb-4">Overview</h2>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-gray-600">Total Spent:</span>
+            <span className="text-xl font-bold">${periodTotalExpenses.toFixed(2)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-gray-600">Time Period:</span>
+            <span className="text-gray-800 font-medium">{getPeriodDescription()}</span>
+          </div>
+        </div>
+        
+        {/* Category Breakdown */}
+        <div className="bg-white p-4 rounded-lg shadow-md lg:col-span-2">
+          <h2 className="text-lg font-semibold mb-4">Category Breakdown</h2>
+          <div className="h-[280px] overflow-hidden">
+            <Pie
+              data={{
+                labels: categoryData.map(item => item.category),
+                datasets: [{
+                  data: categoryData.map(item => item.total),
+                  backgroundColor: chartColors.slice(0, categoryData.length),
+                  borderColor: chartColors.map(color => color.replace('0.7', '1')),
+                  borderWidth: 2,
+                  hoverOffset: 15,
+                  hoverBorderWidth: 3
+                }]
+              }}
+              options={{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    position: 'right',
+                    display: true,
+                    labels: {
+                      usePointStyle: true,
+                      boxWidth: 10,
+                      padding: 15,
+                      font: {
+                        size: 12
+                      }
+                    }
+                  },
+                  title: {
+                    display: false
+                  },
+                  tooltip: {
+                    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                    padding: 12,
+                    bodyFont: {
+                      size: 14
+                    },
+                    callbacks: {
+                      label: function(context) {
+                        const label = context.label || '';
+                        const value = parseFloat(context.raw || 0);
+                        const total = context.dataset.data.reduce((a, b) => parseFloat(a) + parseFloat(b), 0);
+                        const percentage = Math.round((value / total) * 100);
+                        return `${label}: $${value.toFixed(2)} (${percentage}%)`;
+                      }
+                    }
+                  }
+                },
+                cutout: '45%',
+                radius: '90%'
+              }}
+              height={280}
+            />
           </div>
         </div>
       </div>
-
-      {/* Total expenses summary */}
-      <div className="bg-white p-6 rounded-lg shadow-sm mb-6">
-        <h2 className="text-xl font-bold mb-2">Total Expenses</h2>
-        <p className="text-3xl font-bold text-blue-600">${periodTotalExpenses.toFixed(2)}</p>
-        <p className="text-sm text-gray-500">
-          {timeRange === 'week' ? 'Last 7 days' : timeRange === 'month' ? 'Last 30 days' : 'Last 365 days'}
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow-sm h-[350px]">
-          <h2 className="text-xl font-bold mb-4">{trendLabel} Trend</h2>
-          {trendData.length > 0 ? (
-            <div className="h-[280px] relative">
-              {timeRange === 'week' ? (
-                <WeeklyChart data={sortedWeeklyData} dailyExpenses={analyticsData.dailyData || []} />
-              ) : timeRange === 'month' ? (
-                <MonthlyChart data={sortedMonthlyData} />
-              ) : (
-                <div className="h-[280px] w-full">
-                  <Line
+      
+      {/* Time-Based Analysis */}
+      <div className="bg-white p-4 rounded-lg shadow-md mb-8">
+        <h2 className="text-lg font-semibold mb-4">{trendLabel} Spending</h2>
+        
+        <div className="h-[350px] overflow-hidden">
+          {timeRange === 'week' ? (
+            <WeeklyChart 
+              data={analyticsData.weeklyTrends || []} 
+              dailyExpenses={analyticsData.dailyData || []} 
+            />
+          ) : timeRange === 'month' ? (
+            <MonthlyChart 
+              data={analyticsData.monthlyTrend || []} 
+              weeklyTrends={analyticsData.weeklyTrends || []} 
+            />
+          ) : (
+            <div className="h-[300px] overflow-hidden">
+              {limitedMonthlyData.length > 0 ? (
+                <div className="relative h-full">
+                  <Line 
                     data={{
                       labels: limitedMonthlyData.map(item => {
-                        if (!item.month) return '';
-                        // eslint-disable-next-line no-unused-vars
-                        const [year, month] = item.month.split('-');
-                        
-                        // Convert month number to abbreviated month name
-                        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                        const monthIndex = parseInt(month) - 1;
-                        const monthName = monthNames[monthIndex] || month;
-                        
-                        // For yearly view, show just month names
-                        // For monthly view, show abbreviated month with year
-                        return timeRange === 'year' ? monthName : `${monthName}${year !== new Date().getFullYear().toString() ? ` '${year.slice(2)}` : ''}`;
+                        const date = new Date(`${item.month}-01`);
+                        return date.toLocaleString('default', { month: 'short', year: '2-digit' });
                       }),
                       datasets: [{
-                        label: `${trendLabel} Expenses`,
+                        label: 'Monthly Expenses',
                         data: limitedMonthlyData.map(item => item.total),
                         borderColor: chartColors[0].replace("0.7", "1"),
                         backgroundColor: chartColors[0],
@@ -421,33 +474,19 @@ function Analytics() {
                     options={{
                       responsive: true,
                       maintainAspectRatio: false,
+                      resizeDelay: 100, // Add delay to prevent excessive redraws
                       plugins: {
                         legend: {
                           display: false
                         },
                         tooltip: {
                           backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                          padding: 12,
-                          bodyFont: {
-                            size: 14
+                          animation: {
+                            duration: 0
                           },
-                          titleFont: {
-                            size: 14,
-                            weight: 'bold'
-                          },
-                          intersect: false,
-                          mode: 'index',
                           callbacks: {
                             label: function(context) {
-                              return `$${context.parsed.y.toLocaleString()}`;
-                            },
-                            title: function(context) {
-                              // Enhance the tooltip title with more readable date
-                              if (timeRange === 'year') {
-                                return context[0].label;
-                              } else {
-                                return context[0].label;
-                              }
+                              return `$${parseFloat(context.parsed.y).toFixed(2)}`;
                             }
                           }
                         }
@@ -455,191 +494,92 @@ function Analytics() {
                       scales: {
                         y: {
                           beginAtZero: true,
-                          grid: {
-                            color: 'rgba(0, 0, 0, 0.05)'
-                          },
-                          border: {
-                            dash: [4, 4]
-                          },
                           ticks: {
-                            font: {
-                              size: 12
-                            },
                             callback: value => `$${value}`
                           }
-                        },
-                        x: {
-                          grid: {
-                            display: false
-                          },
-                          ticks: {
-                            font: {
-                              size: timeRange === 'year' ? 13 : 12,
-                              weight: '600'
-                            },
-                            maxRotation: timeRange === 'year' ? 0 : 30,
-                            minRotation: timeRange === 'year' ? 0 : 30,
-                            color: '#555',
-                            autoSkip: false,
-                            maxTicksLimit: timeRange === 'year' ? 12 : 6
-                          }
                         }
-                      },
-                      layout: {
-                        padding: {
-                          left: 5,
-                          right: 15,
-                          top: 20,
-                          bottom: timeRange === 'year' ? 10 : 15
-                        }
-                      },
-                      interaction: {
-                        mode: 'index',
-                        intersect: false
                       },
                       hover: {
                         mode: 'index',
-                        intersect: false
+                        intersect: false,
+                        animationDuration: 0
+                      },
+                      animation: {
+                        duration: 300 // Reduce animation duration
                       }
                     }}
                   />
-                  {limitedMonthlyData.length > 0 && (
-                    <div className="text-sm text-gray-500 text-center pt-2">
-                      Yearly total: ${limitedMonthlyData.reduce((sum, item) => sum + parseFloat(item.total || 0), 0).toFixed(2)}
-                    </div>
-                  )}
+                  <div className="text-sm text-gray-500 text-center pt-2">
+                    Yearly total: ${limitedMonthlyData.reduce((sum, item) => sum + parseFloat(item.total || 0), 0).toFixed(2)}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center text-gray-500 h-full flex items-center justify-center">
+                  No monthly data available
                 </div>
               )}
             </div>
-          ) : (
-            <p className="text-gray-500">No {trendLabel.toLowerCase()} data available</p>
-          )}
-        </div>
-
-        <div className="bg-white p-4 rounded-lg shadow-sm h-[350px]">
-          <h2 className="text-xl font-bold mb-4">{trendLabel} Category Breakdown</h2>
-          {categoryData.length > 0 ? (
-            <div className="h-[280px] relative">
-              <Pie
-                data={{
-                  labels: categoryData.map(item => item.category),
-                  datasets: [{
-                    data: categoryData.map(item => item.total),
-                    backgroundColor: chartColors.slice(0, categoryData.length),
-                    borderColor: chartColors.map(color => color.replace('0.7', '1')),
-                    borderWidth: 2,
-                    hoverOffset: 15,
-                    hoverBorderWidth: 3
-                  }]
-                }}
-                options={{
-                  responsive: true,
-                  maintainAspectRatio: false,
-                  plugins: {
-                    legend: {
-                      position: 'right',
-                      display: true,
-                      labels: {
-                        usePointStyle: true,
-                        boxWidth: 10,
-                        padding: 15,
-                        font: {
-                          size: 12
-                        }
-                      }
-                    },
-                    title: {
-                      display: false
-                    },
-                    tooltip: {
-                      backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                      padding: 12,
-                      bodyFont: {
-                        size: 14
-                      },
-                      callbacks: {
-                        label: function(context) {
-                          const label = context.label || '';
-                          const value = parseFloat(context.raw || 0);
-                          const total = context.dataset.data.reduce((a, b) => parseFloat(a) + parseFloat(b), 0);
-                          const percentage = Math.round((value / total) * 100);
-                          return `${label}: $${value.toFixed(2)} (${percentage}%)`;
-                        }
-                      }
-                    }
-                  },
-                  cutout: '45%',
-                  radius: '90%'
-                }}
-                height={280}
-              />
-            </div>
-          ) : (
-            <p className="text-gray-500">No {trendLabel.toLowerCase()} category data available</p>
           )}
         </div>
       </div>
-
-      <div className="bg-white p-6 rounded-lg shadow-sm">
-        <h2 className="text-xl font-bold mb-4">{insights.title}</h2>
+      
+      {/* Insights */}
+      <div className="bg-white p-4 rounded-lg shadow-md mb-8">
+        <h2 className="text-lg font-semibold mb-4">{getTimeSpecificInsights().title}</h2>
         
-        {categoryData.length > 0 && trendData.length > 0 ? (
-          <div className="space-y-6">
-            {/* Top Categories Analysis */}
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">Top Categories for {getPeriodDescription()}</h3>
-              <div className="space-y-2">
-                {insights.topCategories.map((category, index) => (
-                  <div key={index} className="flex justify-between items-center">
+        {categoryData.length > 0 ? (
+          <div>
+            {/* Top Categories */}
+            <div className="mb-6">
+              <h3 className="text-md font-medium text-gray-700 mb-3">Top Categories</h3>
+              <ul className="space-y-3">
+                {getTimeSpecificInsights().topCategories.map((cat, idx) => (
+                  <li key={idx} className="flex justify-between items-center">
                     <div className="flex items-center">
-                      <span className={`h-3 w-3 rounded-full mr-2`} style={{backgroundColor: chartColors[index]}}></span>
-                      <span className="font-medium">{category.category}</span>
+                      <div className="w-3 h-3 rounded-full mr-2" 
+                          style={{backgroundColor: chartColors[idx % chartColors.length]}}></div>
+                      <span>{cat.category}</span>
                     </div>
-                    <span className="text-gray-700">${category.total.toFixed(2)}</span>
-                  </div>
+                    <div className="font-medium">${cat.total.toFixed(2)}</div>
+                  </li>
                 ))}
-              </div>
-              {insights.topCategories.length > 0 && (
-                <p className="mt-2 text-sm text-gray-600">
-                  {insights.topCategories[0].category} is your highest spending category in {getPeriodDescription()}, accounting for 
-                  {` ${Math.round((insights.topCategories[0].total / periodTotalExpenses) * 100)}%`} of your total expenses.
-                </p>
-              )}
+              </ul>
             </div>
             
             {/* Trend Analysis */}
-            {insights.trendAnalysis && (
-              <div className="mb-4">
-                <h3 className="text-lg font-semibold text-gray-800 mb-2">{trendLabel} Trend Analysis</h3>
-                <p className="mb-2">
-                  Your spending 
-                  <span className={`font-medium ${insights.trendAnalysis.isIncrease ? 'text-red-600' : 'text-green-600'}`}>
-                    {` ${insights.trendAnalysis.isIncrease ? 'increased' : 'decreased'} by ${Math.abs(insights.trendAnalysis.percentChange).toFixed(1)}% `}
-                  </span>
-                  compared to {insights.trendAnalysis.comparison}.
+            {getTimeSpecificInsights().trendAnalysis && (
+              <div className="mb-6">
+                <h3 className="text-md font-medium text-gray-700 mb-3">Trend Analysis</h3>
+                <p className="mt-2 text-sm text-gray-600">
+                  {insights.topCategories[0].category} is your highest spending category, representing {((insights.topCategories[0].total / periodTotalExpenses) * 100).toFixed(0)}% of your expenses for {getPeriodDescription()}.
+                </p>
+                <p className="mt-2 text-sm text-gray-600">
+                  Compared to {getTimeSpecificInsights().trendAnalysis.comparison}, your spending 
+                  {getTimeSpecificInsights().trendAnalysis.isIncrease ? " increased" : " decreased"} by 
+                  {Math.abs(getTimeSpecificInsights().trendAnalysis.percentChange).toFixed(1)}%.
                 </p>
               </div>
             )}
             
-            {/* Spending Pattern Analysis */}
-            <div>
-              <h3 className="text-lg font-semibold text-gray-800 mb-2">{trendLabel} Spending Patterns</h3>
-              <ul className="list-disc list-inside space-y-1">
-                {insights.patterns.map((pattern, index) => (
-                  <li key={index} className="text-gray-700">{pattern}</li>
+            {/* Spending Patterns */}
+            <div className="mb-2">
+              <h3 className="text-md font-medium text-gray-700 mb-3">Spending Patterns</h3>
+              <ul className="space-y-2">
+                {getTimeSpecificInsights().patterns.map((pattern, idx) => (
+                  <li key={idx} className="text-sm text-gray-600">• {pattern}</li>
                 ))}
-                
-                {insights.patterns.length === 0 && (
-                  <li className="text-gray-700">
-                    Add more expense data to see detailed spending patterns for {getPeriodDescription()}.
-                  </li>
-                )}
               </ul>
             </div>
           </div>
         ) : (
-          <p className="text-gray-500 text-center">Add more expense data to see trends and insights</p>
+          <div className="text-center text-gray-500">
+            No insights available. Add more transactions to see spending insights.
+          </div>
         )}
+      </div>
+      
+      <div className="text-sm text-gray-500 text-center pb-4">
+        Data is updated in real-time as you add or remove expenses.
       </div>
     </div>
   );
