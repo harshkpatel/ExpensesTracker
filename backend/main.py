@@ -45,7 +45,7 @@ DB_DIR.mkdir(exist_ok=True)
 DATABASE_PATH = DB_DIR / "expenses.db"
 
 # Database setup
-SQLALCHEMY_DATABASE_URL = "sqlite:///./data/expenses.db"
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{DATABASE_PATH}"
 engine = create_engine(SQLALCHEMY_DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
